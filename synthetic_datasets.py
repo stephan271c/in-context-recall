@@ -6,24 +6,24 @@ print(torch.__version__)
 
 class InContextRecallDataset(Dataset):
     def __init__(self,
-        num_examples: int,
+        seq_len: int,
         dim: int,
         input_corr: float=0.0,
         output_corr: float=0.0
     )-> None:
-        self.num_examples = num_examples
+        self.seq_len = seq_len
         self.dim = dim
         self.input_corr = input_corr
         self.output_corr = output_corr        
-        self.inputs = generate_vectors(num_examples, dim, input_corr)
-        self.targets = generate_vectors(num_examples, dim, output_corr)
+        self.inputs = generate_vectors(seq_len, dim, input_corr)
+        self.targets = generate_vectors(seq_len, dim, output_corr)
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        assert index < self.num_examples, "Index out of range"
+        assert index < self.seq_len, "Index out of range"
         return self.inputs[index], self.targets[index]
     
     def __len__(self) -> int:
-        return self.num_examples
+        return self.seq_len
 
 
 class SequenceLearningDataset(Dataset):

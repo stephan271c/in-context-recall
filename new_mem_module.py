@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-import copy
-from typing import Tuple, List, Callable, Type
+from torch.func import functional_call
+from typing import Tuple, Callable, Dict
 from abc import ABC, abstractmethod
 
 # we will need to define functional forwards. we can pass in params.
@@ -19,7 +19,7 @@ class MemoryModule(nn.Module, ABC):
         pass
 
     
-class OneStep(nn.Module):
+class metaRNN(nn.Module):
     """Wraps a model for online learning and evaluation on a per-sample basis.
 
     This module simulates an online learning process. The backward pass for this
@@ -45,13 +45,15 @@ class OneStep(nn.Module):
         self.weight_model = weight_model
         self.inner_model = memory_module
         
-    def forward(self, params: Tuple[torch.Tensor], keys: torch.Tensor, vals: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+    def forward(self, param_dict: Dict[str, torch.Tensor], keys: torch.Tensor, vals: torch.Tensor) -> Dict[str, torch.Tensor]:
         """should be only 1 step of the sequence. but depends on the context size."""
-        preds = [self.inner_model.functional_forward(key, params) for key in keys]
+
+        param_tensors = tuple(param_dict.values())
+        preds = [functional_call(self.inner_model,param_dict,key) for key in keys]  
         if not self.weight_model:
             loss = self.loss_fn(preds, vals)
         else:
             loss = self.loss_fn(preds, vals, self.weight_model(keys))
-        grads = torch.autograd.grad(loss, params, create_graph=True)
-        new_params = tuple(param - 0.1 * grad for param, grad in zip(params, grads))
+        grads = torch.autograd.grad(loss, param_tensors, create_graph=True)
+        new_params = {name: param - 0.1 * grad for (name, param), grad in zip(param_dict.items(), grads)}
         return new_params
