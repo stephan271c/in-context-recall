@@ -2,25 +2,48 @@ import torch
 from torch.utils.data import Dataset
 from typing import Tuple, Callable
 
-print(torch.__version__)
 
 class InContextRecallDataset(Dataset):
     def __init__(self,
         seq_len: int,
         dim: int,
+        context_size: int,
         input_corr: float=0.0,
         output_corr: float=0.0
     )-> None:
         self.seq_len = seq_len
         self.dim = dim
+        self.context_size = context_size
         self.input_corr = input_corr
         self.output_corr = output_corr        
         self.inputs = generate_vectors(seq_len, dim, input_corr)
         self.targets = generate_vectors(seq_len, dim, output_corr)
 
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        assert index < self.seq_len, "Index out of range"
-        return self.inputs[index], self.targets[index]
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Case 1: The index is a single integer
+        if isinstance(idx, int):
+            start_idx = idx - self.context_size + 1
+            if start_idx < 0:
+                padding_len = abs(start_idx)
+                padding = torch.zeros(padding_len, self.dim)
+                input_window = torch.cat((padding, self.inputs[:idx+1]), dim=0)
+                target_window = torch.cat((padding, self.targets[:idx+1]), dim=0)
+            else:
+                input_window = self.inputs[start_idx:idx+1]
+                target_window = self.targets[start_idx:idx+1]
+            return input_window, target_window
+        
+        # Case 2: The index is a slice
+        elif isinstance(idx, slice):
+            indices = range(*idx.indices(len(self)))
+            
+            input_batch = torch.stack([self[i][0] for i in indices])
+            target_batch = torch.stack([self[i][1] for i in indices])
+            
+            return input_batch, target_batch
+        
+        else:
+            raise TypeError("Invalid argument type.")
     
     def __len__(self) -> int:
         return self.seq_len

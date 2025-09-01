@@ -32,16 +32,16 @@ class metaRNN(nn.Module):
         self, 
         loss_fn: Callable, # (loss_fn(predictions, targets, weights))
         memory_module: MemoryModule,
-        loss_context_size: int = 1, # for the context window for loss. weird b/c loss_fn implicitly uses this. I used it in the forward for evals
+        context_size: int = 1, # for the context window for loss. weird b/c loss_fn implicitly uses this. I used it in the forward for evals
         weight_model: nn.Module | None = None
         ):
         super().__init__()
-        if loss_context_size < 1:
+        if context_size < 1:
             raise ValueError("context_size must be at least 1.")
 
         # The base model is stored as a template and is not trained by the external optimizer.
         self.loss_fn = loss_fn
-        self.loss_context_size = loss_context_size
+        self.loss_context_size = context_size
         self.weight_model = weight_model
         self.inner_model = memory_module
         
