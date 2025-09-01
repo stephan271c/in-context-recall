@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from typing import Tuple, Callable
+from typing import Tuple, Callable, Union
 
 
 class InContextRecallDataset(Dataset):
@@ -19,7 +19,7 @@ class InContextRecallDataset(Dataset):
         self.inputs = generate_vectors(seq_len, dim, input_corr)
         self.targets = generate_vectors(seq_len, dim, output_corr)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: Union[int, slice]) -> Tuple[torch.Tensor, torch.Tensor]:
         # Case 1: The index is a single integer
         if isinstance(idx, int):
             start_idx = idx - self.context_size + 1
@@ -35,10 +35,9 @@ class InContextRecallDataset(Dataset):
         
         # Case 2: The index is a slice
         elif isinstance(idx, slice):
-            indices = range(*idx.indices(len(self)))
             
-            input_batch = torch.stack([self[i][0] for i in indices])
-            target_batch = torch.stack([self[i][1] for i in indices])
+            input_batch = self.inputs[idx]
+            target_batch = self.targets[idx]
             
             return input_batch, target_batch
         

@@ -23,7 +23,7 @@ def validate_loss_inputs(func):
     return wrapper
 
 @validate_loss_inputs
-def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None, p: int = 2) -> float:
+def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None, p: int = 2) -> torch.Tensor:
     """
     computes weighted L_p^p-loss over a window.
 
@@ -41,7 +41,7 @@ def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: t
     else:
         weighted_powered_diff = powered_diff
 
-    final_loss = torch.sum(weighted_powered_diff).item()
+    final_loss = torch.sum(weighted_powered_diff)
     return final_loss
 
 @validate_loss_inputs
