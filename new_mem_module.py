@@ -40,7 +40,8 @@ class metaRNN(nn.Module):
         else:
             loss = self.loss_fn(preds, vals, self.weight_model(keys))
         grads = torch.autograd.grad(loss, param_tensors, create_graph=True)
-        new_params = {name: param - 0.1 * grad for (name, param), grad in zip(param_dict.items(), grads)}
+        #new_params = {name: param - 0.0 * grad for (name, param), grad in zip(param_dict.items(), grads)}
+        new_params = param_dict
         return new_params
 
 
@@ -49,7 +50,7 @@ def lookback_accuracy_fn(
     y_pred_context: List[torch.Tensor],
     y_target_sequence: torch.Tensor,
     lookback_correct_counts: List[int],
-    lookback_total_counts: List[int]
+    lookback_total_counts: List[int],
 ):
     """
     Calculates lookback accuracy for a given timestep.
@@ -74,3 +75,32 @@ def lookback_accuracy_fn(
                 lookback_correct_counts[lookback_dist] += 1
             
             lookback_total_counts[lookback_dist] += 1
+
+def general_accuracy(
+    t: int,
+    y_pred_context: List[torch.Tensor],
+    y_target_sequence: torch.Tensor,
+    correct_counts: List[int],
+    total_counts: List[int],
+):
+    """
+    Calculates accuracy for a given timestep.
+
+    For each prediction z_i made by model M_t, compares it against the entire
+    set of targets. Updates the count lists.
+    """
+    # Skip accuracy calculation for t=0
+    if t == 0:
+        return
+
+    with torch.no_grad():
+        for i in range(t + 1):
+            z_i = y_pred_context[i]
+            relevant_targets = y_target_sequence
+            similarity_scores = torch.matmul(z_i, relevant_targets.T)
+            best_match_idx = torch.argmax(similarity_scores)
+            
+            if best_match_idx.item() == i:
+                correct_counts[i] += 1
+            total_counts[i] += 1
+
