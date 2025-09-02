@@ -40,8 +40,8 @@ class metaRNN(nn.Module):
         else:
             loss = self.loss_fn(preds, vals, self.weight_model(keys))
         grads = torch.autograd.grad(loss, param_tensors, create_graph=True)
-        #new_params = {name: param - 0.0 * grad for (name, param), grad in zip(param_dict.items(), grads)}
-        new_params = param_dict
+        new_params = {name: param - 0.1 * grad for (name, param), grad in zip(param_dict.items(), grads)}
+        #new_params = param_dict
         return new_params
 
 
