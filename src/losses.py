@@ -33,7 +33,8 @@ def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: t
         weights: tensor of shape (window_size)
         p: int
     """
-
+    if weights is not None:
+        assert predictions.shape[1] == targets.shape[1] == weights.shape[0], "window size must align"
     # --- Compute Loss ---
     powered_diff = torch.pow(torch.abs(predictions - targets), p)
     if weights is not None:
