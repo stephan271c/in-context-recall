@@ -4,7 +4,16 @@ from torch.func import functional_call
 from typing import Callable, Dict
 import torch.nn.functional as F
 
-import torchopt
+class HyperparamModel(nn.Module):
+    """A generic model to predict a single hyperparameter."""
+    def __init__(self, key_dim: int, initial_bias: float = 0.0):
+        super().__init__()
+        self.scaler = nn.Linear(key_dim, 1)
+        torch.nn.init.constant_(self.scaler.bias, initial_bias)
+
+    def forward(self, current_key: torch.Tensor) -> torch.Tensor:
+        # Sigmoid ensures output is between (0, 1)
+        return torch.sigmoid(self.scaler(current_key)).squeeze()
 
 class WeightModel(nn.Module):
     def __init__(self, input_dim: int, output_dim: int):
