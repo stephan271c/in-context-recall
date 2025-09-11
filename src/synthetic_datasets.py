@@ -6,6 +6,10 @@ from scipy.linalg import solve_discrete_lyapunov
 
 
 def check_stationarity(k_dim: int, n_lags: int, a_coeffs: np.ndarray, b_coeffs: np.ndarray, c_coeffs: np.ndarray, d_coeffs: np.ndarray) -> Tuple[bool, np.ndarray]:
+    assert len(a_coeffs) == n_lags, f"Length of a_coeffs ({len(a_coeffs)}) must equal n_lags ({n_lags})"
+    assert len(b_coeffs) == n_lags, f"Length of b_coeffs ({len(b_coeffs)}) must equal n_lags ({n_lags})"
+    assert len(c_coeffs) == n_lags, f"Length of c_coeffs ({len(c_coeffs)}) must equal n_lags ({n_lags})"
+    assert len(d_coeffs) == n_lags, f"Length of d_coeffs ({len(d_coeffs)}) must equal n_lags ({n_lags})"
     phi_matrices = []
     I_k = np.eye(k_dim)
     for i in range(n_lags):
