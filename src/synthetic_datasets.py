@@ -133,6 +133,11 @@ class InContextRecallDataset(Dataset):
 
     def __getitem__(self, idx: Union[int, slice]) -> Tuple[torch.Tensor, torch.Tensor]:
         # Case 1: The index is a single integer
+        """
+        returns a tuple (input_window, target_window) where:
+        - input_window is a tensor of shape (context_size, key_dim)
+        - target_window is a tensor of shape (context_size, val_dim)
+        """
         if isinstance(idx, int):
             start_idx = idx - self.context_size + 1
             if start_idx < 0:

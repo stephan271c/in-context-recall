@@ -1,6 +1,8 @@
 import torch
+import torch.nn as nn
 from typing import Any, Dict, Tuple
 from src.meta_optimizers import MetaOptimizer, ManualAdamW
+from src.losses import windowed_recall_cross_entropy
 
 
 def test_manual_adamw():
@@ -66,3 +68,34 @@ def test_differentiability():
 if __name__ == "__main__":
     test_manual_adamw()
     test_differentiability()
+    test_windowed_recall_cross_entropy_matches_manual()
+
+
+def test_windowed_recall_cross_entropy_matches_manual():
+    model = nn.Linear(2, 2, bias=False)
+    with torch.no_grad():
+        model.weight.copy_(torch.eye(2))
+
+    params = {name: p.clone().detach().requires_grad_(True) for name, p in model.named_parameters()}
+    keys = torch.eye(2)
+    values = keys.clone()
+    loss_fn = nn.CrossEntropyLoss()
+
+    loss = windowed_recall_cross_entropy(
+        model,
+        params,
+        keys,
+        values,
+        time_index=1,
+        window_size=2,
+        loss_fn=loss_fn,
+    )
+
+    manual_logits = torch.matmul(keys, values.T)
+    targets = torch.tensor([0, 1])
+    expected_loss = loss_fn(manual_logits, targets)
+
+    assert torch.allclose(loss, expected_loss)
+
+    loss.backward()
+    assert all(param.grad is not None for param in params.values())
