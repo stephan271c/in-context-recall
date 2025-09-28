@@ -65,11 +65,6 @@ def test_differentiability():
     assert loss.grad_fn is not None
     print("Differentiability verified: Gradients flow through ManualAdamW steps!")
 
-if __name__ == "__main__":
-    test_manual_adamw()
-    test_differentiability()
-    test_windowed_recall_cross_entropy_matches_manual()
-
 
 def test_windowed_recall_cross_entropy_matches_manual():
     model = nn.Linear(2, 2, bias=False)
@@ -99,3 +94,9 @@ def test_windowed_recall_cross_entropy_matches_manual():
 
     loss.backward()
     assert all(param.grad is not None for param in params.values())
+
+
+if __name__ == "__main__":
+    test_manual_adamw()
+    test_differentiability()
+    test_windowed_recall_cross_entropy_matches_manual()
