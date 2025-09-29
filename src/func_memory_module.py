@@ -13,7 +13,7 @@ class HyperparamModel(nn.Module):
 
     def forward(self, current_key: torch.Tensor) -> torch.Tensor:
         # Sigmoid ensures output is between (0, 1)
-        return torch.sigmoid(self.scaler(current_key)).squeeze()
+        return torch.sigmoid(self.scaler(current_key)).squeeze(-1)
 
 class WeightModel(nn.Module):
     def __init__(self, input_dim: int, output_dim: int):
