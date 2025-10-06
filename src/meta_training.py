@@ -49,6 +49,9 @@ class MetaTrainingConfig:
     beta1: float = 0.95
     beta2: float = 0.99
     log_every_sequences: int = 50
+    train_memory_module: bool = True
+    train_weight_model: bool = True
+    train_lr_model: bool = True
 
     def __post_init__(self) -> None:
         if self.num_sequences % self.batch_size:
@@ -186,12 +189,31 @@ def run_meta_training(
     weight_model, memory_module, lr_model = build_meta_models(config, device)
 
     outer_loss_fn = outer_loss_fn or nn.CrossEntropyLoss()
-    outer_optimizer = torch.optim.AdamW(
-        list(memory_module.parameters())
-        + list(weight_model.parameters())
-        + list(lr_model.parameters()),
-        lr=config.outer_lr,
-    )
+
+    memory_params = list(memory_module.parameters())
+    weight_params = list(weight_model.parameters())
+    lr_params = list(lr_model.parameters())
+
+    for param in memory_params:
+        param.requires_grad_(config.train_memory_module)
+    for param in weight_params:
+        param.requires_grad_(config.train_weight_model)
+    for param in lr_params:
+        param.requires_grad_(config.train_lr_model)
+
+    trainable_parameters: List[nn.Parameter] = []
+    if config.train_memory_module:
+        trainable_parameters.extend(memory_params)
+    if config.train_weight_model:
+        trainable_parameters.extend(weight_params)
+    if config.train_lr_model:
+        trainable_parameters.extend(lr_params)
+
+    outer_optimizer: Optional[torch.optim.Optimizer]
+    if trainable_parameters:
+        outer_optimizer = torch.optim.AdamW(trainable_parameters, lr=config.outer_lr)
+    else:
+        outer_optimizer = None
 
     inner_optimizer = ManualAdam()
     history: List[float] = []
@@ -202,7 +224,8 @@ def run_meta_training(
             memory_module, config.batch_size, device, inner_optimizer
         )
 
-        outer_optimizer.zero_grad()
+        if outer_optimizer is not None:
+            outer_optimizer.zero_grad()
         total_outer_loss = torch.zeros((), device=device)
 
         for time_index in range(config.seq_len):
@@ -248,8 +271,9 @@ def run_meta_training(
 
         avg_outer_loss = total_outer_loss / (config.seq_len * config.batch_size)
         history.append(float(avg_outer_loss.detach()))
-        avg_outer_loss.backward()
-        outer_optimizer.step()
+        if outer_optimizer is not None:
+            avg_outer_loss.backward()
+            outer_optimizer.step()
 
         processed_sequences = (meta_step + 1) * config.batch_size
         should_log = meta_step == 0
@@ -318,4 +342,3 @@ def evaluate_memory_module(
     mean_accuracy, counts = average_accuracy_across_sequences(histories)
     offsets = torch.arange(mean_accuracy.shape[0], device=mean_accuracy.device)
     return EvaluationResult(offsets=offsets, mean_accuracy=mean_accuracy, counts=counts)
-
