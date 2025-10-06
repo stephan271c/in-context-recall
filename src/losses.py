@@ -51,7 +51,7 @@ def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: t
 @validate_loss_inputs
 def windowed_inner_product_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None) -> float:
     """
-    computes weighted L_p^p-loss over a window.
+    computes inner-loss over a window.
 
     args:
         predictions: tensor of shape (vec_length, window_size)
