@@ -46,24 +46,35 @@ class LinearModel(nn.Module):
         return self.linear(x)
     
 class TTTMLP(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int):
+    def __init__(self, input_dim: int, output_dim: int, num_layers: int = 2):
         super().__init__()
+        if num_layers < 1:
+            raise ValueError("num_layers must be at least 1")
+
         self.input_dim = input_dim
         self.output_dim = output_dim
+        self.num_layers = num_layers
         intermediate_dim = 4 * self.input_dim
 
-        # First linear layer parameters
-        self.W1 = nn.Parameter(torch.normal(0, 0.02, size=(self.input_dim, intermediate_dim)))
-        self.b1 = nn.Parameter(torch.zeros(1, intermediate_dim))
+        # Build layer dimensions: input -> hidden(s) -> output.
+        dims = [self.input_dim]
+        if self.num_layers > 1:
+            dims.extend([intermediate_dim] * (self.num_layers - 1))
+        dims.append(self.output_dim)
 
-        # Second linear layer parameters
-        self.W2 = nn.Parameter(torch.normal(0, 0.02, size=(intermediate_dim, self.output_dim)))
-        self.b2 = nn.Parameter(torch.zeros(1, self.output_dim))
-
+        self.weights = nn.ParameterList([
+            nn.Parameter(torch.normal(0, 0.02, size=(in_dim, out_dim)))
+            for in_dim, out_dim in zip(dims[:-1], dims[1:])
+        ])
+        self.biases = nn.ParameterList([
+            nn.Parameter(torch.zeros(1, out_dim))
+            for out_dim in dims[1:]
+        ])
 
     def forward(self, x):
-        x = torch.matmul(x, self.W1) + self.b1
-        x = F.gelu(x)
-        x = torch.matmul(x, self.W2) + self.b2
+        for idx, (weight, bias) in enumerate(zip(self.weights, self.biases)):
+            x = torch.matmul(x, weight) + bias
+            if idx < self.num_layers - 1:
+                x = F.gelu(x)
         return x
     
