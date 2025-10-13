@@ -13,6 +13,8 @@ __all__ = [
     "compute_recall_accuracies",
     "average_accuracy_by_offset",
     "average_accuracy_across_sequences",
+    "correct_retrieval_counts_by_timestep",
+    "average_correct_retrievals_across_sequences",
 ]
 
 
@@ -180,6 +182,74 @@ def average_accuracy_across_sequences(
     return mean, counts
 
 
+def correct_retrieval_counts_by_timestep(
+    accuracy_history: Sequence[torch.Tensor],
+) -> torch.Tensor:
+    """Count correctly retrieved value vectors per timestep for one sequence.
+
+    Args:
+        accuracy_history: Output of :func:`compute_recall_accuracies`. Each tensor
+            must be one-dimensional where element ``i`` indicates whether the value
+            seen ``i`` steps ago was recovered correctly at the timestep.
+
+    Returns:
+        A tensor ``counts`` of length equal to ``len(accuracy_history)`` where
+        ``counts[t]`` is the number of correct retrievals at timestep ``t``.
+
+    Raises:
+        ValueError: If ``accuracy_history`` is empty or contains invalid tensors.
+    """
+    if not accuracy_history:
+        raise ValueError("accuracy_history must contain at least one timestep tensor")
+
+    device = accuracy_history[0].device
+    counts = torch.zeros(len(accuracy_history), dtype=torch.float32, device=device)
+
+    for t, offset_tensor in enumerate(accuracy_history):
+        if offset_tensor.ndim != 1:
+            raise ValueError("each accuracy tensor must be one-dimensional")
+        counts[t] = offset_tensor.to(device=counts.device, dtype=counts.dtype).sum()
+
+    return counts
+
+
+def average_correct_retrievals_across_sequences(
+    batch_histories: Sequence[Sequence[torch.Tensor]],
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Average retrieval counts across multiple sequences.
+
+    Args:
+        batch_histories: Iterable where each element is the output of
+            :func:`compute_recall_accuracies` for a different sequence.
+
+    Returns:
+        A tuple ``(mean_counts, counts)`` where ``mean_counts[t]`` is the average
+        number of vectors correctly retrieved at timestep ``t``. ``counts`` stores
+        how many sequences contributed to each timestep average, with unused
+        positions filled with zero and the corresponding mean set to ``NaN``.
+
+    Raises:
+        ValueError: If no accuracy tensors are provided.
+    """
+    first_tensor = _find_first_tensor(batch_histories)
+    if first_tensor is None:
+        raise ValueError("batch_histories must contain at least one accuracy tensor")
+
+    max_timesteps = max(len(history) for history in batch_histories)
+    totals = torch.zeros(max_timesteps, dtype=torch.float32, device=first_tensor.device)
+    counts = torch.zeros(max_timesteps, dtype=torch.int64, device=first_tensor.device)
+
+    for history in batch_histories:
+        timestep_counts = correct_retrieval_counts_by_timestep(history)
+        length = timestep_counts.shape[0]
+        totals[:length] += timestep_counts.to(device=totals.device, dtype=totals.dtype)
+        counts[:length] += 1
+
+    mean_counts = totals / counts.clamp(min=1).to(totals.dtype)
+    mean_counts = mean_counts.masked_fill(counts == 0, float("nan"))
+    return mean_counts, counts
+
+
 def _call_model(
     model: nn.Module,
     params: Optional[Dict[str, torch.Tensor]],
@@ -218,4 +288,3 @@ def _find_first_tensor(
         for tensor in history:
             return tensor
     return None
-
