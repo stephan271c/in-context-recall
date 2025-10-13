@@ -19,6 +19,7 @@ from synthetic_datasets import InContextRecallDataset
 
 __all__ = [
     "MetaTrainingConfig",
+    "MemoryModuleFactory",
     "EvaluationConfig",
     "MetaBatchItem",
     "MetaTrainingArtifacts",
@@ -62,6 +63,9 @@ class MetaTrainingConfig:
         return self.num_sequences // self.batch_size
 
 
+MemoryModuleFactory = Callable[[MetaTrainingConfig], nn.Module]
+
+
 @dataclass
 class EvaluationConfig:
     """Settings used when evaluating trained memory modules."""
@@ -87,7 +91,7 @@ class MetaBatchItem:
 class MetaTrainingArtifacts:
     """Trained models alongside simple training history."""
 
-    memory_module: TTTMLP
+    memory_module: nn.Module
     weight_model: WeightModel
     lr_model: HyperparamModel
     outer_losses: List[float]
@@ -110,6 +114,11 @@ class EvaluationResult:
         )
 
 
+def _default_memory_module_factory(config: MetaTrainingConfig) -> nn.Module:
+    """Instantiate the default memory module when no custom factory is provided."""
+    return TTTMLP(config.key_dim, config.val_dim)
+
+
 def resolve_device(device_preference: str) -> torch.device:
     """Pick an appropriate torch.device for the current machine."""
     if device_preference == "cuda" and not torch.cuda.is_available():
@@ -118,11 +127,15 @@ def resolve_device(device_preference: str) -> torch.device:
 
 
 def build_meta_models(
-    config: MetaTrainingConfig, device: torch.device
-) -> Tuple[WeightModel, TTTMLP, HyperparamModel]:
+    config: MetaTrainingConfig,
+    device: torch.device,
+    *,
+    memory_module_factory: Optional[MemoryModuleFactory] = None,
+) -> Tuple[WeightModel, nn.Module, HyperparamModel]:
     """Instantiate the meta-learner components on the requested device."""
     weight_model = WeightModel(config.key_dim, config.context_dim).to(device)
-    memory_module = TTTMLP(config.key_dim, config.val_dim).to(device)
+    factory = memory_module_factory or _default_memory_module_factory
+    memory_module = factory(config).to(device)
     lr_model = HyperparamModel(config.key_dim, initial_bias=config.hyper_lr_initial_bias).to(device)
     return weight_model, memory_module, lr_model
 
@@ -149,11 +162,11 @@ def sample_meta_batch(config: MetaTrainingConfig, device: torch.device) -> List[
 
 
 def _initialise_inner_state(
-    model: TTTMLP,
+    model: nn.Module,
     batch_size: int,
     device: torch.device,
     inner_optimizer: ManualAdam,
-) -> Tuple[TTTMLP, List[Dict[str, torch.Tensor]], List[Dict[str, Any]]]:
+) -> Tuple[nn.Module, List[Dict[str, torch.Tensor]], List[Dict[str, Any]]]:
     """Create a functional copy of ``model`` and optimizer states per task."""
     fast_model = copy.deepcopy(model).to(device)
     param_sets: List[Dict[str, torch.Tensor]] = []
@@ -171,6 +184,7 @@ def _initialise_inner_state(
 def run_meta_training(
     config: MetaTrainingConfig,
     *,
+    memory_module_factory: Optional[MemoryModuleFactory] = None,
     inner_loss_fn: Callable[[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], torch.Tensor] = windowed_p_loss,
     outer_loss_fn: Optional[nn.Module] = None,
     log_callback: Optional[Callable[[int, int, float, float], None]] = None,
@@ -179,6 +193,8 @@ def run_meta_training(
 
     Args:
         config: Hyperparameters controlling data generation and optimisation.
+        memory_module_factory: Optional callable that returns a freshly
+            initialised memory module when provided. Defaults to :class:`TTTMLP`.
         inner_loss_fn: Differentiable loss used for the inner updates.
         outer_loss_fn: Loss used when scoring recall performance. A new
             ``nn.CrossEntropyLoss`` instance is created when this is ``None``.
@@ -186,7 +202,11 @@ def run_meta_training(
             avg_outer_loss, sample_lr)`` to report progress.
     """
     device = resolve_device(config.device_preference)
-    weight_model, memory_module, lr_model = build_meta_models(config, device)
+    weight_model, memory_module, lr_model = build_meta_models(
+        config,
+        device,
+        memory_module_factory=memory_module_factory,
+    )
 
     outer_loss_fn = outer_loss_fn or nn.CrossEntropyLoss()
 
@@ -301,7 +321,7 @@ def run_meta_training(
 
 
 def evaluate_memory_module(
-    memory_module: TTTMLP,
+    memory_module: nn.Module,
     config: EvaluationConfig,
     *,
     device: Optional[torch.device] = None,
@@ -314,8 +334,20 @@ def evaluate_memory_module(
         except StopIteration:
             device = torch.device("cpu")
 
-    key_dim = config.key_dim or memory_module.input_dim
-    val_dim = config.val_dim or memory_module.output_dim
+    key_dim = config.key_dim if config.key_dim is not None else getattr(memory_module, "input_dim", None)
+    if key_dim is None:
+        raise ValueError(
+            "EvaluationConfig.key_dim must be provided when the memory_module "
+            "does not define an 'input_dim' attribute."
+        )
+    val_dim = config.val_dim if config.val_dim is not None else getattr(memory_module, "output_dim", None)
+    if val_dim is None:
+        raise ValueError(
+            "EvaluationConfig.val_dim must be provided when the memory_module "
+            "does not define an 'output_dim' attribute."
+        )
+    key_dim = int(key_dim)
+    val_dim = int(val_dim)
     if config.context_dim is None:
         raise ValueError("EvaluationConfig.context_dim must be specified for evaluation")
     context_dim = config.context_dim
