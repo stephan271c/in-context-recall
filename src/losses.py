@@ -12,15 +12,17 @@ def validate_loss_inputs(func):
     """
     @wraps(func)
     def wrapper(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None, *args, **kwargs):
-        assert predictions.dim() == 2, f"Expected predictions to be a 2D tensor, but got {predictions.dim()} dimensions."
-        assert predictions.shape == targets.shape, \
-            f"Predictions and targets must have the same shape, but got {predictions.shape} and {targets.shape}."
+        if predictions.dim() != 2:
+            raise ValueError(f"Expected predictions to be a 2D tensor, but got {predictions.dim()} dimensions.")
+        if predictions.shape != targets.shape:
+            raise ValueError(f"Predictions and targets must have the same shape, but got {predictions.shape} and {targets.shape}.")
 
         if weights is not None:
-            assert weights.dim() == 1, f"Expected weights to be a 1D tensor, but got {weights.dim()} dimensions."
-            assert weights.shape[0] == predictions.shape[1], \
-                f"Weights length ({weights.shape[0]}) must match the window_size dimension of predictions ({predictions.shape[1]})."
-        
+            if weights.dim() != 1:
+                raise ValueError(f"Expected weights to be a 1D tensor, but got {weights.dim()} dimensions.")
+            if weights.shape[0] != predictions.shape[1]:
+                raise ValueError(f"Weights length ({weights.shape[0]}) must match the window_size dimension of predictions ({predictions.shape[1]}).")
+
         # If all checks pass, call the original function
         return func(predictions, targets, weights, *args, **kwargs)
     return wrapper
