@@ -1,8 +1,6 @@
 import torch
 from torch.utils.data import Dataset
 from typing import Tuple, Callable, Union, List, Dict
-import numpy as np
-from scipy.linalg import solve_discrete_lyapunov
 
 
 class InContextRecallDataset(Dataset):
