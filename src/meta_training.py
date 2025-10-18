@@ -129,6 +129,8 @@ def resolve_device(device_preference: str) -> torch.device:
 class ConstantOutputModule(nn.Module):
     """Wrap a tensor so it can be reused as an nn.Module output."""
 
+    value: torch.Tensor
+
     def __init__(self, value: Union[torch.Tensor, float]):
         super().__init__()
         tensor_value = value if isinstance(value, torch.Tensor) else torch.tensor(value)
