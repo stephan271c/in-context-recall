@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Optional
 import torch
 from torch import nn
 
+from meta_optimizers import ManualAdam, MetaOptimizer
 __all__ = [
     "MetaTrainingConfig",
     "MemoryModuleFactory",
@@ -34,11 +35,11 @@ class MetaTrainingConfig:
     train_memory_module: bool = True
     train_weight_model: bool = True
     train_lr_model: bool = True
-    inner_optimizer_name: str = "manual_adam"
+    inner_optimizer: MetaOptimizer = field(default_factory=ManualAdam)
     inner_optimizer_kwargs: Dict[str, Any] = field(
         default_factory=lambda: {"beta1": 0.95, "beta2": 0.99, "epsilon": 1e-8}
     )
-    outer_optimizer_factory: Optional[Callable[..., torch.optim.Optimizer]] = None
+    outer_optimizer: Optional[Callable[..., torch.optim.Optimizer]] = None
     outer_optimizer_kwargs: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

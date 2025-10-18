@@ -6,6 +6,7 @@ import copy
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.optim
 from torch import nn
 from torch.func import functional_call
 
@@ -16,7 +17,6 @@ from .artifacts import MetaTrainingArtifacts
 from .batch import sample_meta_batch
 from .config import MetaTrainingConfig, resolve_device
 from .models import build_meta_models
-from .optimizers import _build_inner_optimizer, _build_outer_optimizer
 
 __all__ = ["run_meta_training"]
 
@@ -82,13 +82,30 @@ def run_meta_training(
     if config.train_lr_model:
         trainable_parameters.extend(lr_params)
 
-    outer_optimizer = _build_outer_optimizer(
-        trainable_parameters,
-        config.outer_optimizer_factory,
-        dict(config.outer_optimizer_kwargs),
-    )
+    if trainable_parameters:
+        optimizer_config = config.outer_optimizer
+        optimizer_kwargs: Dict[str, Any] = dict(config.outer_optimizer_kwargs)
+        if isinstance(optimizer_config, torch.optim.Optimizer):
+            outer_optimizer = optimizer_config
+        else:
+            optimizer_factory = optimizer_config or torch.optim.AdamW
+            if optimizer_config is None and "lr" not in optimizer_kwargs:
+                optimizer_kwargs["lr"] = 0.01
+            try:
+                outer_optimizer = optimizer_factory(
+                    trainable_parameters, **optimizer_kwargs
+                )
+            except TypeError as exc:
+                if optimizer_kwargs:
+                    raise TypeError(
+                        "outer_optimizer could not be called with the provided "
+                        "outer_optimizer_kwargs."
+                    ) from exc
+                outer_optimizer = optimizer_factory(trainable_parameters)
+    else:
+        outer_optimizer = None
 
-    inner_optimizer = _build_inner_optimizer(config.inner_optimizer_name)
+    inner_optimizer = copy.deepcopy(config.inner_optimizer)
     base_inner_hparams = dict(config.inner_optimizer_kwargs)
     history: List[float] = []
 
