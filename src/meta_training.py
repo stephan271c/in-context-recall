@@ -54,8 +54,8 @@ class MetaTrainingConfig:
     inner_optimizer_kwargs: Dict[str, Any] = field(
         default_factory=lambda: {"beta1": 0.95, "beta2": 0.99, "epsilon": 1e-8}
     )
-    outer_optimizer_name: str = "adamw"
-    outer_optimizer_kwargs: Dict[str, Any] = field(default_factory=lambda: {"lr": 0.01})
+    outer_optimizer_factory: Optional[Callable[..., torch.optim.Optimizer]] = None
+    outer_optimizer_kwargs: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.num_sequences % self.batch_size:
@@ -135,13 +135,6 @@ INNER_OPTIMIZER_REGISTRY: Dict[str, Type[MetaOptimizer]] = {
     "manual_sgd": ManualSGD,
 }
 
-OUTER_OPTIMIZER_REGISTRY: Dict[str, Type[torch.optim.Optimizer]] = {
-    "adam": torch.optim.Adam,
-    "adamw": torch.optim.AdamW,
-    "sgd": torch.optim.SGD,
-}
-
-
 def _build_inner_optimizer(name: str) -> MetaOptimizer:
     """Return an instantiated meta-optimizer from the configured registry."""
     key = name.lower()
@@ -155,16 +148,36 @@ def _build_inner_optimizer(name: str) -> MetaOptimizer:
     return optimizer_cls()
 
 
-def _get_outer_optimizer_class(name: str) -> Type[torch.optim.Optimizer]:
-    """Resolve the torch optimizer class to use for the outer loop."""
-    key = name.lower()
+def _build_outer_optimizer(
+    params: Sequence[nn.Parameter],
+    factory: Optional[Callable[..., torch.optim.Optimizer]],
+    kwargs: Dict[str, Any],
+) -> Optional[torch.optim.Optimizer]:
+    """Construct the outer-loop optimizer, defaulting to AdamW when omitted."""
+    if not params:
+        return None
+
+    optimizer_factory: Callable[..., torch.optim.Optimizer]
+    optimizer_kwargs: Dict[str, Any]
+    if factory is None:
+        optimizer_factory = torch.optim.AdamW
+        optimizer_kwargs = {"lr": 0.01}
+    else:
+        optimizer_factory = factory
+        optimizer_kwargs = {}
+
+    optimizer_kwargs.update(kwargs)
+
     try:
-        return OUTER_OPTIMIZER_REGISTRY[key]
-    except KeyError as exc:
-        available = ", ".join(sorted(OUTER_OPTIMIZER_REGISTRY))
-        raise ValueError(
-            f"Unknown outer optimizer '{name}'. Available options: {available}"
-        ) from exc
+        return optimizer_factory(params, **optimizer_kwargs)
+    except TypeError as exc:
+        if optimizer_kwargs:
+            raise TypeError(
+                "outer_optimizer_factory could not be called with the provided "
+                "outer_optimizer_kwargs."
+            ) from exc
+        # Retry without kwargs for callables that already capture configuration.
+        return optimizer_factory(params)
 
 
 class ConstantOutputModule(nn.Module):
@@ -337,13 +350,11 @@ def run_meta_training(
     if config.train_lr_model:
         trainable_parameters.extend(lr_params)
 
-    outer_optimizer: Optional[torch.optim.Optimizer]
-    if trainable_parameters:
-        outer_optimizer_cls = _get_outer_optimizer_class(config.outer_optimizer_name)
-        outer_optimizer_kwargs = dict(config.outer_optimizer_kwargs)
-        outer_optimizer = outer_optimizer_cls(trainable_parameters, **outer_optimizer_kwargs)
-    else:
-        outer_optimizer = None
+    outer_optimizer = _build_outer_optimizer(
+        trainable_parameters,
+        config.outer_optimizer_factory,
+        dict(config.outer_optimizer_kwargs),
+    )
 
     inner_optimizer = _build_inner_optimizer(config.inner_optimizer_name)
     base_inner_hparams = dict(config.inner_optimizer_kwargs)
