@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import nn
@@ -92,8 +92,8 @@ class MetaTrainingArtifacts:
     """Trained models alongside simple training history."""
 
     memory_module: nn.Module
-    weight_model: WeightModel
-    lr_model: HyperparamModel
+    weight_model: nn.Module
+    lr_model: nn.Module
     outer_losses: List[float]
 
 
@@ -126,18 +126,74 @@ def resolve_device(device_preference: str) -> torch.device:
     return torch.device(device_preference)
 
 
+class ConstantOutputModule(nn.Module):
+    """Wrap a tensor so it can be reused as an nn.Module output."""
+
+    def __init__(self, value: Union[torch.Tensor, float]):
+        super().__init__()
+        tensor_value = value if isinstance(value, torch.Tensor) else torch.tensor(value)
+        self.register_buffer("value", tensor_value.clone().detach())
+
+    def forward(self, *args: Any, **kwargs: Any) -> torch.Tensor:
+        return self.value
+
+
 def build_meta_models(
     config: MetaTrainingConfig,
     device: torch.device,
     *,
     memory_module_factory: Optional[MemoryModuleFactory] = None,
-) -> Tuple[WeightModel, nn.Module, HyperparamModel]:
-    """Instantiate the meta-learner components on the requested device."""
-    weight_model = WeightModel(config.key_dim, config.context_dim).to(device)
+    weight_model: Optional[Union[nn.Module, torch.Tensor]] = None,
+    lr_model: Optional[Union[nn.Module, torch.Tensor, float]] = None,
+) -> Tuple[nn.Module, nn.Module, nn.Module]:
+    """Instantiate the meta-learner components on the requested device.
+
+    Args:
+        config: Meta-training hyperparameters controlling model dimensions.
+        device: Device all returned modules should live on.
+        memory_module_factory: Optional callable that constructs the memory module.
+            Defaults to :class:`TTTMLP` when omitted.
+        weight_model: Optional override for the weight model. When a tensor is
+            provided it is wrapped so the same weights are returned for every
+            forward pass, keeping them fixed throughout training.
+        lr_model: Optional override for the learning-rate model. Tensors or floats
+            are treated as constant outputs.
+
+    Returns:
+        Tuple containing the weight-producing module, the memory module, and the
+        hyper-parameter module.
+    """
+    if weight_model is None:
+        weight_model_module: nn.Module = WeightModel(config.key_dim, config.context_dim)
+    elif isinstance(weight_model, torch.Tensor):
+        weight_model_module = ConstantOutputModule(weight_model)
+    elif isinstance(weight_model, nn.Module):
+        weight_model_module = weight_model
+    else:
+        raise TypeError(
+            "weight_model must be an nn.Module or tensor when provided; "
+            f"received type {type(weight_model).__name__}"
+        )
+    weight_model_module = weight_model_module.to(device)
+
     factory = memory_module_factory or _default_memory_module_factory
     memory_module = factory(config).to(device)
-    lr_model = HyperparamModel(config.key_dim, initial_bias=config.hyper_lr_initial_bias).to(device)
-    return weight_model, memory_module, lr_model
+    if lr_model is None:
+        lr_model_module: nn.Module = HyperparamModel(
+            config.key_dim, initial_bias=config.hyper_lr_initial_bias
+        )
+    elif isinstance(lr_model, (torch.Tensor, float)):
+        lr_model_module = ConstantOutputModule(lr_model)
+    elif isinstance(lr_model, nn.Module):
+        lr_model_module = lr_model
+    else:
+        raise TypeError(
+            "lr_model must be an nn.Module, tensor, or float when provided; "
+            f"received type {type(lr_model).__name__}"
+        )
+    lr_model_module = lr_model_module.to(device)
+
+    return weight_model_module, memory_module, lr_model_module
 
 
 def sample_meta_batch(config: MetaTrainingConfig, device: torch.device) -> List[MetaBatchItem]:
@@ -185,6 +241,8 @@ def run_meta_training(
     config: MetaTrainingConfig,
     *,
     memory_module_factory: Optional[MemoryModuleFactory] = None,
+    weight_model_override: Optional[Union[nn.Module, torch.Tensor]] = None,
+    lr_model_override: Optional[Union[nn.Module, torch.Tensor, float]] = None,
     inner_loss_fn: Callable[[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], torch.Tensor] = windowed_p_loss,
     outer_loss_fn: Optional[nn.Module] = None,
     log_callback: Optional[Callable[[int, int, float, float], None]] = None,
@@ -195,6 +253,12 @@ def run_meta_training(
         config: Hyperparameters controlling data generation and optimisation.
         memory_module_factory: Optional callable that returns a freshly
             initialised memory module when provided. Defaults to :class:`TTTMLP`.
+        weight_model_override: Optional module or weight tensor to use instead of
+            instantiating a new :class:`WeightModel`. Passing a tensor keeps the
+            loss weights fixed during training.
+        lr_model_override: Optional module, tensor, or scalar that replaces the
+            default :class:`HyperparamModel`. Tensors and scalars act as constant
+            outputs.
         inner_loss_fn: Differentiable loss used for the inner updates.
         outer_loss_fn: Loss used when scoring recall performance. A new
             ``nn.CrossEntropyLoss`` instance is created when this is ``None``.
@@ -206,6 +270,8 @@ def run_meta_training(
         config,
         device,
         memory_module_factory=memory_module_factory,
+        weight_model=weight_model_override,
+        lr_model=lr_model_override,
     )
 
     outer_loss_fn = outer_loss_fn or nn.CrossEntropyLoss()
