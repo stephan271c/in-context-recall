@@ -55,8 +55,9 @@ def test_differentiability():
         # Synthetic grad (e.g., from a loss)
         grads = {'w': torch.tensor([0.1, 0.2], requires_grad=True)}
         params, states = manual_opt.step(params, grads, states, **hyperparams)
-    
+
     # Compute a loss on final params to check if grad_fn exists
+    params['w'].retain_grad()
     loss = params['w'].sum()
     loss.backward()
     
