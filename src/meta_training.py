@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
 from torch import nn
@@ -13,7 +13,7 @@ from torch.func import functional_call
 from evaluate_functions import average_accuracy_across_sequences, compute_recall_accuracies
 from func_memory_module import HyperparamModel, TTTMLP, WeightModel
 from losses import windowed_p_loss, windowed_recall_cross_entropy
-from meta_optimizers import ManualAdam
+from meta_optimizers import ManualAdam, ManualAdamW, ManualSGD, MetaOptimizer
 from synthetic_datasets import InContextRecallDataset
 
 
@@ -45,14 +45,17 @@ class MetaTrainingConfig:
     recall_window: int = 1
     output_corr: float = 0.5
     device_preference: str = "cuda"
-    outer_lr: float = 0.01
     hyper_lr_initial_bias: float = -2.0
-    beta1: float = 0.95
-    beta2: float = 0.99
     log_every_sequences: int = 50
     train_memory_module: bool = True
     train_weight_model: bool = True
     train_lr_model: bool = True
+    inner_optimizer_name: str = "manual_adam"
+    inner_optimizer_kwargs: Dict[str, Any] = field(
+        default_factory=lambda: {"beta1": 0.95, "beta2": 0.99, "epsilon": 1e-8}
+    )
+    outer_optimizer_name: str = "adamw"
+    outer_optimizer_kwargs: Dict[str, Any] = field(default_factory=lambda: {"lr": 0.01})
 
     def __post_init__(self) -> None:
         if self.num_sequences % self.batch_size:
@@ -126,10 +129,46 @@ def resolve_device(device_preference: str) -> torch.device:
     return torch.device(device_preference)
 
 
+INNER_OPTIMIZER_REGISTRY: Dict[str, Type[MetaOptimizer]] = {
+    "manual_adam": ManualAdam,
+    "manual_adamw": ManualAdamW,
+    "manual_sgd": ManualSGD,
+}
+
+OUTER_OPTIMIZER_REGISTRY: Dict[str, Type[torch.optim.Optimizer]] = {
+    "adam": torch.optim.Adam,
+    "adamw": torch.optim.AdamW,
+    "sgd": torch.optim.SGD,
+}
+
+
+def _build_inner_optimizer(name: str) -> MetaOptimizer:
+    """Return an instantiated meta-optimizer from the configured registry."""
+    key = name.lower()
+    try:
+        optimizer_cls = INNER_OPTIMIZER_REGISTRY[key]
+    except KeyError as exc:
+        available = ", ".join(sorted(INNER_OPTIMIZER_REGISTRY))
+        raise ValueError(
+            f"Unknown inner optimizer '{name}'. Available options: {available}"
+        ) from exc
+    return optimizer_cls()
+
+
+def _get_outer_optimizer_class(name: str) -> Type[torch.optim.Optimizer]:
+    """Resolve the torch optimizer class to use for the outer loop."""
+    key = name.lower()
+    try:
+        return OUTER_OPTIMIZER_REGISTRY[key]
+    except KeyError as exc:
+        available = ", ".join(sorted(OUTER_OPTIMIZER_REGISTRY))
+        raise ValueError(
+            f"Unknown outer optimizer '{name}'. Available options: {available}"
+        ) from exc
+
+
 class ConstantOutputModule(nn.Module):
     """Wrap a tensor so it can be reused as an nn.Module output."""
-
-    value: torch.Tensor
 
     def __init__(self, value: Union[torch.Tensor, float]):
         super().__init__()
@@ -223,7 +262,7 @@ def _initialise_inner_state(
     model: nn.Module,
     batch_size: int,
     device: torch.device,
-    inner_optimizer: ManualAdam,
+    inner_optimizer: MetaOptimizer,
 ) -> Tuple[nn.Module, List[Dict[str, torch.Tensor]], List[Dict[str, Any]]]:
     """Create a functional copy of ``model`` and optimizer states per task."""
     fast_model = copy.deepcopy(model).to(device)
@@ -252,7 +291,8 @@ def run_meta_training(
     """Execute the meta-learning outer loop and return the trained modules.
 
     Args:
-        config: Hyperparameters controlling data generation and optimisation.
+        config: Hyperparameters controlling data generation, optimisation, and
+            the choice/configuration of inner and outer optimizers.
         memory_module_factory: Optional callable that returns a freshly
             initialised memory module when provided. Defaults to :class:`TTTMLP`.
         weight_model_override: Optional module or weight tensor to use instead of
@@ -299,11 +339,14 @@ def run_meta_training(
 
     outer_optimizer: Optional[torch.optim.Optimizer]
     if trainable_parameters:
-        outer_optimizer = torch.optim.AdamW(trainable_parameters, lr=config.outer_lr)
+        outer_optimizer_cls = _get_outer_optimizer_class(config.outer_optimizer_name)
+        outer_optimizer_kwargs = dict(config.outer_optimizer_kwargs)
+        outer_optimizer = outer_optimizer_cls(trainable_parameters, **outer_optimizer_kwargs)
     else:
         outer_optimizer = None
 
-    inner_optimizer = ManualAdam()
+    inner_optimizer = _build_inner_optimizer(config.inner_optimizer_name)
+    base_inner_hparams = dict(config.inner_optimizer_kwargs)
     history: List[float] = []
 
     for meta_step in range(config.total_meta_updates):
@@ -323,11 +366,8 @@ def run_meta_training(
                 current_val = current_val.to(device)
 
                 loss_weights = weight_model(current_key[-1])
-                hyperparams = {
-                    "lr": lr_model(current_key[-1]),
-                    "beta1": config.beta1,
-                    "beta2": config.beta2,
-                }
+                hyperparams = dict(base_inner_hparams)
+                hyperparams["lr"] = lr_model(current_key[-1])
 
                 params = param_sets[task_idx]
                 state = state_list[task_idx]
