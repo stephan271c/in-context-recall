@@ -64,7 +64,7 @@ def windowed_inner_product_loss(predictions: torch.Tensor, targets: torch.Tensor
             
     return 0.0
 
-
+# for outer loss
 def windowed_recall_cross_entropy(
     model: "torch.nn.Module",
     params: Dict[str, torch.Tensor],
