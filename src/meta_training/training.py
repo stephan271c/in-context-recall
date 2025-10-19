@@ -109,6 +109,7 @@ def run_meta_training(
     base_inner_hparams = dict(config.inner_optimizer_kwargs)
     history: List[float] = []
 
+    # One meta-step is one batch of sequences processed through the inner loop
     for meta_step in range(config.total_meta_updates):
         batch = sample_meta_batch(config, device)
         fast_model, param_sets, state_list = _initialise_inner_state(
@@ -120,6 +121,7 @@ def run_meta_training(
         total_outer_loss = torch.zeros((), device=device)
 
         for time_index in range(config.seq_len):
+            # we are really processing the batch one element at a time, not ideal
             for task_idx, item in enumerate(batch):
                 current_key, current_val = item.dataset[time_index]
                 current_key = current_key.to(device)
@@ -129,6 +131,7 @@ def run_meta_training(
                 hyperparams = dict(base_inner_hparams)
                 hyperparams["lr"] = lr_model(current_key[-1])
 
+                # we made multiple copies of the fast model parameters, one per task
                 params = param_sets[task_idx]
                 state = state_list[task_idx]
 

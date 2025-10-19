@@ -16,6 +16,8 @@ class HyperparamModel(nn.Module):
         return torch.sigmoid(self.scaler(current_key)).squeeze(-1)
 
 class WeightModel(nn.Module):
+    """input: key vector, output: weight vector of length context_dim, 
+    for weighting loss over window"""
     def __init__(self, input_dim: int, output_dim: int):
         super().__init__()
         self.net = nn.Sequential(

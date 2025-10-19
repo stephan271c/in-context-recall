@@ -26,7 +26,7 @@ class MetaTrainingConfig:
     context_dim: int = 5
     seq_len: int = 50
     num_sequences: int = 500
-    batch_size: int = 10
+    batch_size: int = 1
     recall_window: int = 1
     output_corr: float = 0.5
     device_preference: str = "cuda"
