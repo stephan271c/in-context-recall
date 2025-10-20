@@ -4,6 +4,33 @@ from torch.func import functional_call
 from typing import Callable, Dict
 import torch.nn.functional as F
 
+
+class OuterProductMemory(nn.Module):
+    """Simple outer product memory module that accumulates key-value associations."""
+
+    def __init__(self, key_dim: int, val_dim: int, device: torch.device):
+        super().__init__()
+        self.key_dim = key_dim
+        self.val_dim = val_dim
+        self.device = device
+        # Initialize cumulative matrix as a buffer (not a parameter)
+        self.register_buffer('cumulative_matrix', torch.zeros(val_dim, key_dim, device=device))
+
+    def forward(self, keys: torch.Tensor) -> torch.Tensor:
+        """Forward pass: predict values for given keys using accumulated outer products."""
+        # keys shape: (batch_size, key_dim) or (seq_len, key_dim)
+        # Return predictions: (batch_size, val_dim) or (seq_len, val_dim)
+        return (self.cumulative_matrix @ keys.T).T
+
+    def update(self, key: torch.Tensor, value: torch.Tensor):
+        """Update the cumulative matrix with a new key-value pair."""
+        # Accumulate outer product: M += value @ key.T
+        self.cumulative_matrix = self.cumulative_matrix + torch.outer(value, key)
+
+    def reset(self):
+        """Reset the cumulative matrix to zeros."""
+        self.cumulative_matrix = torch.zeros(self.val_dim, self.key_dim, device=self.device)
+
 class HyperparamModel(nn.Module):
     """A generic model to predict a single hyperparameter."""
     def __init__(self, key_dim: int, initial_bias: float = 0.0):
