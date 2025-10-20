@@ -74,7 +74,7 @@ class LinearModel(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.linear(x)
     
-class TTTMLP(nn.Module):
+class TTT(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, num_layers: int = 2):
         super().__init__()
         if num_layers < 1:

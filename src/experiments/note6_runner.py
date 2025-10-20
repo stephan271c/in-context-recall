@@ -12,7 +12,7 @@ from evaluate_functions import (
     average_accuracy_across_sequences,
     average_correct_retrievals_across_sequences,
 )
-from func_memory_module import TTTMLP
+from func_memory_module import TTT
 from losses import (
     windowed_inner_product_loss,
     windowed_p_loss,
@@ -299,10 +299,10 @@ def _initialize_ttt_module(
     model_config: ModelConfig,
     experiment: ExperimentConfig,
     device: torch.device,
-) -> TTTMLP:
+) -> TTT:
     params = dict(model_config.model.params)
     num_layers = int(params.get("num_layers", 1))
-    module = TTTMLP(experiment.key_dim, experiment.val_dim, num_layers=num_layers).to(device)
+    module = TTT(experiment.key_dim, experiment.val_dim, num_layers=num_layers).to(device)
 
     init_strategy = str(params.get("init", "ones")).lower()
     if init_strategy == "ones":
@@ -326,7 +326,7 @@ def _initialize_ttt_module(
     return module
 
 
-def _make_functional_params(module: TTTMLP) -> Dict[str, Tensor]:
+def _make_functional_params(module: TTT) -> Dict[str, Tensor]:
     return {
         name: parameter.detach().clone().requires_grad_(True)
         for name, parameter in module.named_parameters()

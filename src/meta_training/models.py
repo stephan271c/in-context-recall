@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
 import torch
 from torch import nn
 
-from func_memory_module import HyperparamModel, TTTMLP, WeightModel
+from func_memory_module import HyperparamModel, TTT, WeightModel
 
 from .config import MetaTrainingConfig, MemoryModuleFactory
 
@@ -16,7 +16,7 @@ __all__ = ["build_meta_models"]
 
 def _default_memory_module_factory(config: MetaTrainingConfig) -> nn.Module:
     """Instantiate the default memory module when no custom factory is provided."""
-    return TTTMLP(config.key_dim, config.val_dim)
+    return TTT(config.key_dim, config.val_dim)
 
 
 class ConstantOutputModule(nn.Module):
