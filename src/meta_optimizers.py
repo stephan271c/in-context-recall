@@ -19,7 +19,7 @@ class MetaOptimizer(ABC):
         Returns:
             Dict containing initial states (e.g., momentum, variance).
         """
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def step(self, params: Dict[str, torch.Tensor], grads: Dict[str, torch.Tensor], states: Dict[str, Any], **hyperparams: Any) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
@@ -38,7 +38,7 @@ class MetaOptimizer(ABC):
         Returns:
             Tuple of (new_params: Dict[str, torch.Tensor], new_states: Dict[str, Any])
         """
-        raise NotImplementedError
+        pass
 
 
 class ManualAdam(MetaOptimizer):
