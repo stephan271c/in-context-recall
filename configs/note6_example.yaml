@@ -1,0 +1,41 @@
+experiment:
+  key_dim: 10
+  val_dim: 10
+  context_size: 5
+  sequence_length: 100
+  num_sequences: 50
+  seed: 0
+  dataset:
+    input_corr: 0.0
+    output_corr: 0.0
+
+---
+name: ttt_meta_sgd_lr_0_1
+model:
+  type: ttt_mlp
+  params:
+    num_layers: 1
+    init: ones
+trainer:
+  type: manual_sgd
+  params:
+    lr: 0.1
+    momentum: 0.0
+inner_loss:
+  name: windowed_p_loss
+  params:
+    p: 2
+outer_loss:
+  name: windowed_recall_cross_entropy
+  params:
+    window_size: 1
+
+---
+name: outer_product_baseline
+model:
+  type: outer_product
+inner_loss:
+  name: windowed_p_loss
+outer_loss:
+  name: none
+notes: Reference outer-product accumulator baseline.
