@@ -87,7 +87,7 @@ def compute_recall_accuracies(
             predicted_indices = logits.argmax(dim=-1)
             target_indices = torch.arange(t + 1, device=predictions.device)
             per_key_accuracy = (predicted_indices == target_indices).to(torch.float32)
-            offset_view = per_key_accuracy.flip(0)
+            offset_view = per_key_accuracy.flip(0) # reverses the tensor on dimension 0, to get offsets
             evaluations.append(offset_view)
 
     return evaluations
@@ -106,10 +106,10 @@ def average_accuracy_by_offset(
     Returns:
         A tuple ``(mean_accuracy, counts)`` where:
 
-        * ``mean_accuracy`` – Tensor whose ``i``-th element is the average
+        * ``mean_accuracy`` - Tensor whose ``i``-th element is the average
           accuracy ``i`` steps prior across all applicable timesteps. Offsets
           that never occur are set to ``NaN``.
-        * ``counts`` – Integer tensor containing the number of observations that
+        * ``counts`` - Integer tensor containing the number of observations that
           contributed to each offset average.
 
     Raises:
@@ -118,24 +118,12 @@ def average_accuracy_by_offset(
     if not accuracy_history:
         raise ValueError("accuracy_history must contain at least one timestep tensor")
 
-    max_len = max(tensor.shape[0] for tensor in accuracy_history)
-    if max_len == 0:
-        raise ValueError("accuracy tensors must be one-dimensional and non-empty")
-
-    device = accuracy_history[0].device
-    totals = torch.zeros(max_len, dtype=torch.float32, device=device)
-    counts = torch.zeros(max_len, dtype=torch.int64, device=device)
-
-    for offset_tensor in accuracy_history:
-        if offset_tensor.ndim != 1:
-            raise ValueError("each accuracy tensor must be one-dimensional")
-        length = offset_tensor.shape[0]
-        totals[:length] += offset_tensor.to(device=totals.device, dtype=totals.dtype)
-        counts[:length] += 1
-
-    mean = totals / counts.clamp(min=1).to(totals.dtype)
-    mean = mean.masked_fill(counts == 0, float("nan"))
-    return mean, counts
+    histories = [tuple(accuracy_history)]
+    return _aggregate_accuracy_histories(
+        histories,
+        empty_history_error="accuracy_history must contain at least one timestep tensor",
+        empty_tensor_error="accuracy tensors must be one-dimensional and non-empty",
+    )
 
 
 def average_accuracy_across_sequences(
@@ -155,23 +143,38 @@ def average_accuracy_across_sequences(
     Raises:
         ValueError: If no accuracy tensors are provided.
     """
-    first_tensor = _find_first_tensor(batch_histories)
+    return _aggregate_accuracy_histories(
+        batch_histories,
+        empty_history_error="batch_histories must contain at least one accuracy tensor",
+        empty_tensor_error="accuracy tensors must not be empty",
+    )
+
+
+def _aggregate_accuracy_histories(
+    histories: Sequence[Sequence[torch.Tensor]],
+    *,
+    empty_history_error: str,
+    empty_tensor_error: str,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Accumulate totals and counts for recall accuracy offsets."""
+    materialized_histories = [tuple(history) for history in histories]
+    first_tensor = _find_first_tensor(materialized_histories)
     if first_tensor is None:
-        raise ValueError("batch_histories must contain at least one accuracy tensor")
+        raise ValueError(empty_history_error)
 
     max_len = 0
-    for history in batch_histories:
+    for history in materialized_histories:
         for tensor in history:
             if tensor.ndim != 1:
                 raise ValueError("each accuracy tensor must be one-dimensional")
             if tensor.shape[0] == 0:
-                raise ValueError("accuracy tensors must not be empty")
+                raise ValueError(empty_tensor_error)
             max_len = max(max_len, tensor.shape[0])
 
     totals = torch.zeros(max_len, dtype=torch.float32, device=first_tensor.device)
     counts = torch.zeros(max_len, dtype=torch.int64, device=first_tensor.device)
 
-    for history in batch_histories:
+    for history in materialized_histories:
         for offset_tensor in history:
             length = offset_tensor.shape[0]
             totals[:length] += offset_tensor.to(device=totals.device, dtype=totals.dtype)
@@ -219,8 +222,9 @@ def average_correct_retrievals_across_sequences(
     """Average retrieval counts across multiple sequences.
 
     Args:
-        batch_histories: Iterable where each element is the output of
-            :func:`compute_recall_accuracies` for a different sequence.
+        batch_histories: Iterable where each element is either the output of
+            :func:`compute_recall_accuracies` for a different sequence or a
+            single 1D tensor containing per-timestep retrieval counts.
 
     Returns:
         A tuple ``(mean_counts, counts)`` where ``mean_counts[t]`` is the average
@@ -231,23 +235,34 @@ def average_correct_retrievals_across_sequences(
     Raises:
         ValueError: If no accuracy tensors are provided.
     """
-    first_tensor = _find_first_tensor(batch_histories)
-    if first_tensor is None:
-        raise ValueError("batch_histories must contain at least one accuracy tensor")
-
-    max_timesteps = max(len(history) for history in batch_histories)
-    totals = torch.zeros(max_timesteps, dtype=torch.float32, device=first_tensor.device)
-    counts = torch.zeros(max_timesteps, dtype=torch.int64, device=first_tensor.device)
-
+    # Transform each sequence's accuracy history into timestep counts
+    count_histories = []
     for history in batch_histories:
-        timestep_counts = correct_retrieval_counts_by_timestep(history)
-        length = timestep_counts.shape[0]
-        totals[:length] += timestep_counts.to(device=totals.device, dtype=totals.dtype)
-        counts[:length] += 1
+        materialized = tuple(history)
+        if not materialized:
+            raise ValueError("each history must contain at least one tensor")
 
-    mean_counts = totals / counts.clamp(min=1).to(totals.dtype)
-    mean_counts = mean_counts.masked_fill(counts == 0, float("nan"))
-    return mean_counts, counts
+        # Support pre-aggregated per-timestep retrieval counts by wrapping them
+        if len(materialized) == 1 and isinstance(materialized[0], torch.Tensor):
+            tensor = materialized[0]
+            if tensor.ndim != 1:
+                raise ValueError("retrieval count tensors must be one-dimensional")
+            count_histories.append([tensor.to(dtype=torch.float32)])
+            continue
+
+        count_tensors = []
+        for offset_tensor in materialized:
+            if offset_tensor.ndim != 1:
+                raise ValueError("each accuracy tensor must be one-dimensional")
+            count_tensor = offset_tensor.to(dtype=torch.float32).sum().unsqueeze(0)
+            count_tensors.append(count_tensor)
+        count_histories.append(count_tensors)
+    
+    return _aggregate_accuracy_histories(
+        count_histories,
+        empty_history_error="batch_histories must contain at least one accuracy tensor",
+        empty_tensor_error="count tensors must not be empty",
+    )
 
 
 def _call_model(
