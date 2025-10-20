@@ -28,18 +28,17 @@ def validate_loss_inputs(func):
     return wrapper
 
 @validate_loss_inputs
-def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None, p: int = 2) -> torch.Tensor:
+def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None, p: int = 2, reg_coef: float = 0.0) -> torch.Tensor:
     """
-    computes weighted L_p^p-loss over a window.
+    computes weighted L_p^p-loss over a window with optional L2 regularization on weights.
 
     args:
         predictions: tensor of shape (vec_length, window_size)
         targets: tensor of shape (vec_length, window_size)
         weights: tensor of shape (window_size)
         p: int
+        reg_coef: regularization coefficient for L2 regularization on weights (default: 0.0)
     """
-    if weights is not None:
-        assert predictions.shape[1] == targets.shape[1] == weights.shape[0], "window size must align"
     # --- Compute Loss ---
     powered_diff = torch.pow(torch.abs(predictions - targets), p)
     if weights is not None:
@@ -47,7 +46,15 @@ def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: t
     else:
         weighted_powered_diff = powered_diff
 
-    final_loss = torch.sum(weighted_powered_diff)
+    data_loss = torch.sum(weighted_powered_diff)
+
+    # --- Add regularization term ---
+    if weights is not None and reg_coef > 0:
+        reg_term = reg_coef * torch.sum(weights ** 2)  # Frobenius norm squared for 1D tensor
+        final_loss = data_loss + reg_term
+    else:
+        final_loss = data_loss
+
     return final_loss
 
 @validate_loss_inputs
