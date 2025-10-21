@@ -5,7 +5,7 @@ from typing import Callable, Dict
 import torch.nn.functional as F
 
 
-class OuterProductMemory(nn.Module):
+class LinearAttentionMemory(nn.Module):
     """Simple outer product memory module that accumulates key-value associations."""
 
     def __init__(self, key_dim: int, val_dim: int, device: torch.device):
@@ -30,6 +30,65 @@ class OuterProductMemory(nn.Module):
     def reset(self):
         """Reset the cumulative matrix to zeros."""
         self.cumulative_matrix = torch.zeros(self.val_dim, self.key_dim, device=self.device)
+
+class MesaLayerMemory(nn.Module):
+    """Mesa-layer memory implementing a discounted Sherman-Morrison update."""
+
+    def __init__(
+        self,
+        key_dim: int,
+        val_dim: int,
+        device: torch.device,
+        lam: float = 1.0,
+        epsilon: float = 1e-6,
+    ):
+        super().__init__()
+        self.key_dim = key_dim
+        self.val_dim = val_dim
+        self.device = device
+        self.lambda_init = lam
+        self.epsilon = epsilon
+
+        dtype = torch.get_default_dtype()
+        self.register_buffer('R_matrix', lam * torch.eye(key_dim, dtype=dtype, device=device))
+        self.register_buffer('S_matrix', torch.zeros(val_dim, key_dim, dtype=dtype, device=device))
+        self.register_buffer('phi_matrix', torch.zeros(val_dim, key_dim, dtype=dtype, device=device))
+
+    def forward(self, keys: torch.Tensor) -> torch.Tensor:
+        """Predict values for the provided keys using the current Mesa memory."""
+        return (self.phi_matrix @ keys.T).T
+
+    def update(self, key: torch.Tensor, value: torch.Tensor, gamma: torch.Tensor):
+        """Update the memory with a new (key, value, gamma) triple."""
+        with torch.no_grad():
+            dtype = self.R_matrix.dtype
+
+            key_vec = key.to(self.device, dtype=dtype).reshape(-1)
+            value_vec = value.to(self.device, dtype=dtype).reshape(-1)
+            gamma_scalar = torch.as_tensor(gamma, device=self.device, dtype=dtype).reshape(())
+
+            if key_vec.numel() != self.key_dim:
+                raise ValueError(f"key has {key_vec.numel()} elements, expected {self.key_dim}")
+            if value_vec.numel() != self.val_dim:
+                raise ValueError(f"value has {value_vec.numel()} elements, expected {self.val_dim}")
+
+            Rk = self.R_matrix @ key_vec
+            denom = 1.0 + torch.dot(key_vec, Rk)
+            denom = denom + self.epsilon
+            outer_Rk = torch.outer(Rk, Rk)
+            self.R_matrix = self.R_matrix - outer_Rk / denom
+
+            self.S_matrix = gamma_scalar * self.S_matrix + torch.outer(value_vec, key_vec)
+            self.phi_matrix = self.S_matrix @ self.R_matrix
+
+    def reset(self):
+        """Reset the internal memory state."""
+        with torch.no_grad():
+            dtype = self.R_matrix.dtype
+            eye = torch.eye(self.key_dim, dtype=dtype, device=self.device)
+            self.R_matrix = self.lambda_init * eye
+            self.S_matrix = torch.zeros(self.val_dim, self.key_dim, dtype=dtype, device=self.device)
+            self.phi_matrix = torch.zeros(self.val_dim, self.key_dim, dtype=dtype, device=self.device)
 
 class HyperparamModel(nn.Module):
     """A generic model to predict a single hyperparameter."""
