@@ -293,7 +293,11 @@ def _infer_evaluation_device(
         first_param = next(model.parameters())
         return first_param.device
     except StopIteration:
-        return torch.device("cpu")
+        try:
+            first_buffer = next(model.buffers())
+            return first_buffer.device
+        except StopIteration:
+            return torch.device("cpu")
 
 
 def _find_first_tensor(
