@@ -69,12 +69,17 @@ class MetaRNN(nn.Module):
         # Store probe evaluation results if requested
         probe_outputs = [] if probe_inputs is not None else None
 
+        def _memory_step(single_input, single_hidden):
+            return self.memory_module.forward(single_input, single_hidden)
+
+        batched_memory_step = vmap(_memory_step)
+
         # --- Explicit "unrolling" of the RNN with probing ---
         for t in range(seq_len):
             input_t = x[:, t, :]
 
             # Use vmap to explicitly handle batch dimension
-            h_next = vmap(...)
+            h_next = batched_memory_step(input_t, h_prev)
 
             # Store the result
             hidden_states_over_time.append(h_next)
@@ -105,11 +110,20 @@ class MetaRNN(nn.Module):
         """Evaluate probe inputs at a specific timestep."""
         # This is a placeholder implementation
         # In practice, this would evaluate the probe inputs using the current hidden state
-        probe_results = []
-        for probe_input in probe_inputs:
-            # problematic: memory_module cannot handle batch dimension, need to use vmap
-            # For now, just use the memory module's output method
-            probe_output = self.memory_module.output(probe_input.unsqueeze(0))
-            probe_results.append(probe_output)
-        return torch.stack(probe_results)
 
+        def _output_step(single_input, single_hidden):
+            return self.memory_module.output(single_input, single_hidden)        
+
+        # Get dimensions
+        batch_size = h_prev.size(0)
+        num_probes = probe_inputs.size(0)
+
+        # Expand probe_inputs to (batch_size, num_probes, input_dim)
+        expanded_probes = probe_inputs.unsqueeze(0).expand(batch_size, -1, -1)
+        
+        # Expand h_prev to (batch_size, num_probes, hidden)
+        expanded_h = h_prev.unsqueeze(1).expand(-1, num_probes, -1)
+        
+        # Use nested vmap to vectorize over batch and probe dimensions
+        batched_output_step = vmap(vmap(_output_step))
+        return batched_output_step(expanded_probes, expanded_h)
