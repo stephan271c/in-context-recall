@@ -281,7 +281,7 @@ def unroll_with_inner_param_dict(
 
         # 2) Gradients w.r.t. ALL leaves in theta (keep graph so the outer learns the init)
         names, leaves = _flatten_named(theta)
-        grads_list = torch.autograd.grad(L_inner, leaves, create_graph=True, retain_graph=False, allow_unused=False)
+        grads_list = torch.autograd.grad(L_inner, leaves, create_graph=True, retain_graph=True, allow_unused=True)
         grads = _zip_to_dict(names, grads_list)
 
         # 3) Learning rate for this step (global or context)
