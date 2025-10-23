@@ -4,20 +4,20 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Tuple, Any, Dict
 
 
-def _match_batch_shape(value: Any, reference: torch.Tensor) -> Any:
-    """Broadcast ``value`` so it is compatible with ``reference`` shapes."""
-    if not isinstance(value, torch.Tensor):
-        return value
-    if value.device != reference.device:
-        value = value.to(reference.device)
-    extra_dims = reference.dim() - value.dim()
-    if extra_dims < 0:
-        raise ValueError(
-            "Hyperparameter tensor has more dimensions than reference parameter."
-        )
-    if extra_dims > 0:
-        value = value.view(value.shape + (1,) * extra_dims)
-    return value
+# def _match_batch_shape(value: Any, reference: torch.Tensor) -> Any:
+#     """Broadcast ``value`` so it is compatible with ``reference`` shapes."""
+#     if not isinstance(value, torch.Tensor):
+#         return value
+#     if value.device != reference.device:
+#         value = value.to(reference.device)
+#     extra_dims = reference.dim() - value.dim()
+#     if extra_dims < 0:
+#         raise ValueError(
+#             "Hyperparameter tensor has more dimensions than reference parameter."
+#         )
+#     if extra_dims > 0:
+#         value = value.view(value.shape + (1,) * extra_dims)
+#     return value
 
 class MetaOptimizer(ABC):
     """
@@ -99,8 +99,7 @@ class ManualAdam(MetaOptimizer):
             v_hat = v_i / (1 - beta2_pow_t)
 
             update_step = m_hat / (v_hat.sqrt() + epsilon)
-            lr_param = _match_batch_shape(lr, p)
-            new_p = p - lr_param * update_step
+            new_p = p - lr * update_step
 
             new_params[name] = new_p
             new_m[name] = m_i
@@ -139,8 +138,7 @@ class ManualSGD(MetaOptimizer):
                 continue
 
             v_i = beta * v[name] + g
-            lr_param = _match_batch_shape(lr, p)
-            new_p = p - lr_param * v_i
+            new_p = p - lr * v_i
 
             new_params[name] = new_p
             new_v[name] = v_i
@@ -180,9 +178,7 @@ class ManualAdamW(MetaOptimizer):
             g = grads.get(name, None)
             if g is None:
                 # Apply only weight decay if no gradient
-                lr_param = _match_batch_shape(lr, p)
-                weight_decay_param = _match_batch_shape(weight_decay, p)
-                new_p = p - lr_param * weight_decay_param * p
+                new_p = p - lr * weight_decay * p
                 new_params[name] = new_p
                 new_m[name] = m[name]
                 new_v[name] = v[name]
@@ -200,13 +196,11 @@ class ManualAdamW(MetaOptimizer):
             adam_step = m_hat / (v_hat.sqrt() + epsilon)
 
             # Decoupled weight decay term
-            weight_decay_param = _match_batch_shape(weight_decay, p)
-            wd_step = weight_decay_param * p
+            wd_step = weight_decay * p
 
             # Combined update
             update_step = adam_step + wd_step
-            lr_param = _match_batch_shape(lr, p)
-            new_p = p - lr_param * update_step
+            new_p = p - lr * update_step
 
             new_params[name] = new_p
             new_m[name] = m_i
