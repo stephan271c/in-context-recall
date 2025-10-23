@@ -249,7 +249,9 @@ def unroll_with_inner_param_dict(
     loss_weight_head: nn.Module | torch.Tensor, # LossWeightHead
     inner_param_dict: Dict[str, torch.Tensor]
 ):
-    device = memory_module.device
+    # Get device from the first parameter of the module
+    first_param = next(memory_module.parameters())
+    device = first_param.device
     if dataset.inputs.device != device:
         dataset.inputs = dataset.inputs.to(device)
         dataset.targets = dataset.targets.to(device)
@@ -273,7 +275,7 @@ def unroll_with_inner_param_dict(
         else:
             loss_weight_t = loss_weight_head
         
-        L_inner = windowed_p_loss(memory_module.forward(key, inner_param_dict).T,
+        L_inner = windowed_p_loss(functional_call(memory_module, inner_param_dict, key).T,
                                   value.T,
                                   weights=loss_weight_t)
 
@@ -289,7 +291,9 @@ def unroll_with_inner_param_dict(
             lr_t = lr_head
 
         # 4) One inner optimizer step on the whole parameter dict
-        theta, states = inner_opt.step(theta, grads, states, lr=lr_t, **inner_param_dict)
+        hyperparams = inner_param_dict.copy()
+        hyperparams['lr'] = lr_t
+        theta, states = inner_opt.step(theta, grads, states, **hyperparams)
 
         # by the way, the context window for windowed cross entropy may be different
         # 5) windowed cross entropy calculates logits and everything internally
