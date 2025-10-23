@@ -32,8 +32,9 @@ class InContextRecallDataset(Dataset):
             start_idx = idx - self.context_size + 1
             if start_idx < 0:
                 padding_len = abs(start_idx)
-                input_padding = torch.zeros(padding_len, self.key_dim)
-                target_padding = torch.zeros(padding_len, self.val_dim)
+                device = self.inputs.device
+                input_padding = torch.zeros(padding_len, self.key_dim, device=device)
+                target_padding = torch.zeros(padding_len, self.val_dim, device=device)
                 input_window = torch.cat((input_padding, self.inputs[:idx+1]), dim=0)
                 target_window = torch.cat((target_padding, self.targets[:idx+1]), dim=0)
             else:
