@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.func import functional_call, vmap
-from typing import Callable, Dict, Sequence
+from typing import Callable, Dict, Sequence, Iterable
 import torch.nn.functional as F
 from abc import ABC, abstractmethod
 
@@ -24,6 +24,97 @@ class MemoryModule(nn.Module, ABC):
         """Produces output from hidden state of memory module"""
         raise NotImplementedError
 
+class TTT(nn.Module):
+    def __init__(self, input_dim: int, output_dim: int, num_layers: int = 2):
+        super().__init__()
+        if num_layers < 1:
+            raise ValueError("num_layers must be at least 1")
+
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.num_layers = num_layers
+        intermediate_dim = 4 * self.input_dim
+
+        # Build layer dimensions: input -> hidden(s) -> output.
+        dims = [self.input_dim]
+        if self.num_layers > 1:
+            dims.extend([intermediate_dim] * (self.num_layers - 1))
+        dims.append(self.output_dim)
+
+        self.weights = nn.ParameterList([
+            nn.Parameter(torch.normal(0, 0.02, size=(in_dim, out_dim)))
+            for in_dim, out_dim in zip(dims[:-1], dims[1:])
+        ])
+        self.biases = nn.ParameterList([
+            nn.Parameter(torch.zeros(1, out_dim))
+            for out_dim in dims[1:]
+        ])
+
+    def forward(self, x):
+        for idx, (weight, bias) in enumerate(zip(self.weights, self.biases)):
+            x = torch.matmul(x, weight) + bias
+            if idx < self.num_layers - 1:
+                x = F.gelu(x)
+        return x
+
+    def update(self, keys: torch.Tensor, values: torch.Tensor, params, loss_fn: Callable, inner_opt,
+              state: Dict = None, **kwargs):
+        """
+        Update TTT module parameters using gradient-based inner loop optimization.
+
+        Args:
+            keys: Input key tensors of size (context_size, key_dim)
+            values: Target of value tensors of size (context_size, value_dim)
+            params: Current parameters of the module
+            loss_fn: Loss function that takes predictions and targets, returns loss
+            inner_opt: Meta optimizer with step() method for parameter updates
+            state: Optimizer state dictionary
+            **kwargs: Additional optimizer-specific parameters (e.g., lr, momentum, etc.)
+
+        Returns:
+            updated_params: Updated parameters dictionary
+            updated_state: Updated optimizer state
+        """
+        if state is None:
+            state = {}
+
+        # Forward pass to get predictions. This makes no sense
+        predictions = functional_call(self, params, keys)
+
+        # Compute loss
+        loss = loss_fn(predictions.T, values.T)
+
+        # Compute gradients
+        param_items = list(params.items())
+        grads_tuple = torch.autograd.grad(
+            loss,
+            tuple(p for _, p in param_items),
+            retain_graph=True,
+            allow_unused=True,
+        )
+
+        # Handle None gradients
+        grads = {}
+        for (name, param), grad in zip(param_items, grads_tuple):
+            grads[name] = torch.zeros_like(param) if grad is None else grad
+
+        # Update parameters using inner optimizer
+        updated_params, updated_state = inner_opt.step(
+            params,
+            grads,
+            state,
+            **kwargs
+        )
+
+        # Update the module parameters in-place
+        with torch.no_grad():
+            for name, param in self.named_parameters():
+                if name in updated_params:
+                    param.copy_(updated_params[name])
+
+        return updated_params, updated_state
+    
+# this is deprecated. use the unroll_with_inner_param_dict function instead
 class MetaRNN(nn.Module):
     def __init__(
         self,
@@ -104,7 +195,7 @@ class MetaRNN(nn.Module):
         if probe_outputs is not None:
             return output, probe_outputs
         else:
-            return output
+            return output, []  # Return empty list if no probes were evaluated
 
     def _evaluate_probes_at_timestep(self, probe_inputs, h_prev, t):
         """Evaluate probe inputs at a specific timestep."""
@@ -127,3 +218,90 @@ class MetaRNN(nn.Module):
         # Use nested vmap to vectorize over batch and probe dimensions
         batched_output_step = vmap(vmap(_output_step))
         return batched_output_step(expanded_probes, expanded_h)
+
+
+
+# Helper functions for parameter dict manipulation
+
+def _flatten_named(params: Dict[str, torch.Tensor]):
+    names = list(params.keys())
+    #tensors = [params[n] for n in names]
+    tensors = list(params.values())
+    return names, tensors
+
+def _zip_to_dict(names: Iterable[str], tensors: Iterable[torch.Tensor]) -> Dict[str, torch.Tensor]:
+    return {n: t for n, t in zip(names, tensors)}
+
+# better loop
+from meta_optimizers import MetaOptimizer
+from losses import windowed_p_loss, windowed_recall_cross_entropy
+
+from synthetic_datasets import InContextRecallDataset
+
+
+@torch.enable_grad()
+def unroll_with_inner_param_dict(
+    memory_module: nn.Module,   # e.g., InnerMLP; its weights are the outer-learned initialization
+    dataset: InContextRecallDataset, # not batched
+    batch_size: int,
+    inner_opt: MetaOptimizer,
+    lr_head: nn.Module | torch.Tensor,          # SigmoidLRHead
+    loss_weight_head: nn.Module | torch.Tensor, # LossWeightHead
+    inner_param_dict: Dict[str, torch.Tensor]
+):
+    device = memory_module.device
+    if dataset.inputs.device != device:
+        dataset.inputs = dataset.inputs.to(device)
+        dataset.targets = dataset.targets.to(device)
+    seq_len = dataset.seq_len
+
+    # theta_0: take the module parameters as the initial hidden state
+    theta = {name: p for name, p in memory_module.named_parameters()}
+    states = inner_opt.init_states(theta)
+
+    outer_loss = 0.0
+
+    #not handling batch dimension
+    for t in range(seq_len): # sequence length
+        key, value = dataset[t]  # get single time step input and target
+
+
+        # 1) Inner loss on the parameter dict (e.g., weighted L2 over all leaves)
+        #    ou can swap this for any differentiable regularizer over theta.Y
+        if isinstance(loss_weight_head, nn.Module):
+            loss_weight_t = loss_weight_head(key[-1])
+        else:
+            loss_weight_t = loss_weight_head
+        
+        L_inner = windowed_p_loss(memory_module.forward(key, inner_param_dict).T,
+                                  value.T,
+                                  weights=loss_weight_t)
+
+        # 2) Gradients w.r.t. ALL leaves in theta (keep graph so the outer learns the init)
+        names, leaves = _flatten_named(theta)
+        grads_list = torch.autograd.grad(L_inner, leaves, create_graph=True, retain_graph=False, allow_unused=False)
+        grads = _zip_to_dict(names, grads_list)
+
+        # 3) Learning rate for this step (global or context)
+        if isinstance(lr_head, nn.Module):
+            lr_t = lr_head(key[-1])
+        else:
+            lr_t = lr_head
+
+        # 4) One inner optimizer step on the whole parameter dict
+        theta, states = inner_opt.step(theta, grads, states, lr=lr_t, **inner_param_dict)
+
+        # by the way, the context window for windowed cross entropy may be different
+        # 5) windowed cross entropy calculates logits and everything internally
+        outer_loss = outer_loss + windowed_recall_cross_entropy(
+            memory_module,
+            theta,
+            dataset.inputs,
+            dataset.targets,
+            time_index=t,
+            window_size=1,
+            loss_fn=F.cross_entropy
+        )   
+
+
+    return outer_loss
