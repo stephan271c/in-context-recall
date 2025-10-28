@@ -11,3 +11,7 @@ wheels/
 
 #folder
 .ignore
+
+# toy scripts
+simple*.py
+simple/
