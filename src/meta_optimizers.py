@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Any, Dict
+from typing import Iterable, Tuple, Any, Dict, Mapping
 
 
 # def _match_batch_shape(value: Any, reference: torch.Tensor) -> Any:
@@ -25,7 +25,7 @@ class MetaOptimizer(ABC):
 
     """
     @abstractmethod
-    def init_states(self, params: Dict[str, torch.Tensor]) -> Dict[str, Any]:
+    def init_states(self, params: Mapping[str, torch.Tensor]) -> Dict[str, Any]:
         """
         Initializes the states for the optimizer given initial parameters.
 

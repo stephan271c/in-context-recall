@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.func import functional_call, vmap, grad
-from typing import Callable, Dict, Sequence, Iterable, Any
+from typing import Callable, Dict, Sequence, Iterable, Any, Mapping
 import torch.nn.functional as F
 from abc import ABC, abstractmethod
 from meta_optimizers import MetaOptimizer
@@ -66,7 +66,7 @@ class TTT(nn.Module):
 
 # Helper functions for parameter dict manipulation
 
-def _stack_param_dict(params: Dict[str, torch.Tensor], batch_size: int) -> Dict[str, torch.Tensor]:
+def _stack_param_dict(params: Mapping[str, torch.Tensor], batch_size: int) -> Dict[str, torch.Tensor]:
     """Replicate a parameter dict across the batch dimension."""
     stacked: Dict[str, torch.Tensor] = {}
     for name, tensor in params.items():
