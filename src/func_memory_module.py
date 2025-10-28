@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.func import functional_call
-from typing import Callable, Dict
+from typing import Callable, Dict, Sequence
 import torch.nn.functional as F
 
 
@@ -128,6 +128,16 @@ class HyperparamModel(nn.Module):
         # Sigmoid ensures output is between (0, 1)
         return torch.sigmoid(self.scaler(current_key)).squeeze(-1)
 
+class LearnableHyperparam(nn.Module):
+    """A learnable scalar hyperparameter."""
+    def __init__(self, initial_value: float = 0.5):
+        super().__init__()
+        self.param = nn.Parameter(torch.tensor(initial_value))
+
+    def forward(self) -> torch.Tensor:
+        # Ignore current_key; just return the learned parameter
+        return torch.sigmoid(self.param)
+
 class WeightModel(nn.Module):
     """input: key vector, output: weight vector of length context_dim, 
     for weighting loss over window"""
@@ -192,4 +202,4 @@ class TTT(nn.Module):
             if idx < self.num_layers - 1:
                 x = F.gelu(x)
         return x
-    
+
