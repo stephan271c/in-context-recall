@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from meta_optimizers import MetaOptimizer
 from losses import windowed_p_loss, windowed_recall_cross_entropy
 from synthetic_datasets import BatchedInContextRecallDataset
+from func_memory_module import LearnableHyperparam
 
 
 class MemoryModule(nn.Module, ABC):
@@ -124,7 +125,7 @@ def unroll_with_inner_param_dict(
     memory_module: nn.Module,   # e.g., TTT; its weights are the outer-learned initialization
     dataset: BatchedInContextRecallDataset,
     inner_opt: MetaOptimizer,
-    lr_head: nn.Module | torch.Tensor | float,          # SigmoidLRHead
+    lr_head: nn.Module | torch.Tensor | float,          # inner learning rate head
     loss_weight_head: nn.Module | torch.Tensor | float, # LossWeightHead
     inner_param_dict: Dict[str, torch.Tensor], # inner optimizer hyperparameters
     eval_mode = False
@@ -133,8 +134,12 @@ def unroll_with_inner_param_dict(
     first_param = next(memory_module.parameters())
     device = first_param.device
 
-    inputs = dataset.inputs.to(device)
-    targets = dataset.targets.to(device)
+    # Move dataset tensors to device in place
+    dataset.inputs = dataset.inputs.to(device)
+    dataset.targets = dataset.targets.to(device)
+
+    inputs = dataset.inputs
+    targets = dataset.targets
 
     # we expect inputs and targets to be 3D tensors: (B, seq_len, key/val-dim)
     if inputs.dim() != 3 or targets.dim() != 3:
@@ -181,9 +186,12 @@ def unroll_with_inner_param_dict(
         grads = grad_fn(theta, key_window, value_window, loss_weights)
 
         if isinstance(lr_head, nn.Module):
-            lr_values = lr_head(current_keys)
+            if isinstance(lr_head, LearnableHyperparam):
+                lr_values = lr_head()
+            else:
+                lr_values = lr_head(current_keys)
         else:
-            lr_values = lr_head if lr_head is not None else inner_param_dict.get('lr', 1.0)
+            lr_values = lr_head
         lr_values = _ensure_batch_vector(lr_values, effective_batch, 1, device, "learning_rate").squeeze(-1)
 
         def inner_step(params, grad_dict, state, lr_scalar):
