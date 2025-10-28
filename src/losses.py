@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.func import functional_call
 from functools import wraps
 from typing import Callable, Dict, Optional
@@ -79,7 +80,7 @@ def windowed_recall_cross_entropy(
     all_values: torch.Tensor,
     time_index: int,
     window_size: int = 1,
-    loss_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+    loss_fn = None,
 ) -> torch.Tensor:
     """Computes a windowed recall loss that scores previous key/value pairs.
 
@@ -126,5 +127,5 @@ def windowed_recall_cross_entropy(
     logits = predictions @ value_matrix.T
     target_indices = torch.arange(start_index, time_index + 1, device=params_device)
 
-    loss_fn = loss_fn or nn.CrossEntropyLoss()
+    loss_fn = loss_fn or F.cross_entropy
     return loss_fn(logits, target_indices)
