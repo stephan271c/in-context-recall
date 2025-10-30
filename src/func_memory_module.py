@@ -8,31 +8,26 @@ import torch.nn.functional as F
 class LinearAttentionMemory(nn.Module):
     """Simple outer product memory module that accumulates key-value associations."""
 
-    def __init__(self, key_dim: int, val_dim: int, device: torch.device):
+    def __init__(self, key_dim: int, val_dim: int):
         super().__init__()
         self.key_dim = key_dim
         self.val_dim = val_dim
-        self.device = device
         # Initialize cumulative matrix as a buffer (not a parameter)
-        self.register_buffer('cumulative_matrix', torch.zeros(val_dim, key_dim, device=device))
+        self.register_buffer('cumulative_matrix', torch.zeros(val_dim, key_dim))
 
     def forward(self, keys: torch.Tensor) -> torch.Tensor:
         """Forward pass: predict values for given keys using accumulated outer products."""
         # keys shape: (batch_size, key_dim) or (seq_len, key_dim)
         # Return predictions: (batch_size, val_dim) or (seq_len, val_dim)
-        orig_device = keys.device
-        orig_dtype = keys.dtype
-        keys_projected = keys.to(self.device, dtype=self.cumulative_matrix.dtype)
-        outputs = (self.cumulative_matrix @ keys_projected.T).T
-        return outputs.to(orig_device, dtype=orig_dtype)
+        outputs = (self.cumulative_matrix @ keys.T).T
+        return outputs
 
     def update(self, key: torch.Tensor, value: torch.Tensor):
         """Update the cumulative matrix with a new key-value pair."""
         # Allow callers to pass either a single vector or a context window.
         with torch.no_grad():
-            dtype = self.cumulative_matrix.dtype
-            key_tensor = key.to(self.device, dtype=dtype)
-            value_tensor = value.to(self.device, dtype=dtype)
+            key_tensor = key
+            value_tensor = value
 
             if key_tensor.ndim == 2 and value_tensor.ndim == 2:
                 if key_tensor.shape[0] != value_tensor.shape[0]:
@@ -56,7 +51,7 @@ class LinearAttentionMemory(nn.Module):
 
     def reset(self):
         """Reset the cumulative matrix to zeros."""
-        self.cumulative_matrix = torch.zeros(self.val_dim, self.key_dim, device=self.device)
+        self.cumulative_matrix.zero_()
 
 class MesaLayerMemory(nn.Module):
     """Mesa-layer memory implementing a discounted Sherman-Morrison update."""
@@ -65,21 +60,18 @@ class MesaLayerMemory(nn.Module):
         self,
         key_dim: int,
         val_dim: int,
-        device: torch.device,
         lam: float = 1.0,
         epsilon: float = 1e-6,
     ):
         super().__init__()
         self.key_dim = key_dim
         self.val_dim = val_dim
-        self.device = device
         self.lambda_init = lam
         self.epsilon = epsilon
 
-        dtype = torch.get_default_dtype()
-        self.register_buffer('R_matrix', lam * torch.eye(key_dim, dtype=dtype, device=device))
-        self.register_buffer('S_matrix', torch.zeros(val_dim, key_dim, dtype=dtype, device=device))
-        self.register_buffer('phi_matrix', torch.zeros(val_dim, key_dim, dtype=dtype, device=device))
+        self.register_buffer('R_matrix', lam * torch.eye(key_dim))
+        self.register_buffer('S_matrix', torch.zeros(val_dim, key_dim))
+        self.register_buffer('phi_matrix', torch.zeros(val_dim, key_dim))
 
     def forward(self, keys: torch.Tensor) -> torch.Tensor:
         """Predict values for the provided keys using the current Mesa memory."""
@@ -88,11 +80,9 @@ class MesaLayerMemory(nn.Module):
     def update(self, key: torch.Tensor, value: torch.Tensor, gamma: torch.Tensor):
         """Update the memory with a new (key, value, gamma) triple."""
         with torch.no_grad():
-            dtype = self.R_matrix.dtype
-
-            key_vec = key.to(self.device, dtype=dtype).reshape(-1)
-            value_vec = value.to(self.device, dtype=dtype).reshape(-1)
-            gamma_scalar = torch.as_tensor(gamma, device=self.device, dtype=dtype).reshape(())
+            key_vec = key.reshape(-1)
+            value_vec = value.reshape(-1)
+            gamma_scalar = gamma.reshape(())
 
             if key_vec.numel() != self.key_dim:
                 raise ValueError(f"key has {key_vec.numel()} elements, expected {self.key_dim}")
@@ -111,11 +101,9 @@ class MesaLayerMemory(nn.Module):
     def reset(self):
         """Reset the internal memory state."""
         with torch.no_grad():
-            dtype = self.R_matrix.dtype
-            eye = torch.eye(self.key_dim, dtype=dtype, device=self.device)
-            self.R_matrix = self.lambda_init * eye
-            self.S_matrix = torch.zeros(self.val_dim, self.key_dim, dtype=dtype, device=self.device)
-            self.phi_matrix = torch.zeros(self.val_dim, self.key_dim, dtype=dtype, device=self.device)
+            self.R_matrix.copy_(self.lambda_init * torch.eye(self.key_dim))
+            self.S_matrix.zero_()
+            self.phi_matrix.zero_()
 
 class HyperparamModel(nn.Module):
     """A generic model to predict a single hyperparameter."""
