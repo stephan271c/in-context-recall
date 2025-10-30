@@ -121,13 +121,14 @@ def _ensure_batch_vector(value: torch.Tensor | float, batch_size: int, length: i
 
 # forward pass unrolling sequence
 @torch.enable_grad()
-def unroll_with_inner_param_dict(
+def inner_optimization_forward(
     memory_module: nn.Module,   # e.g., TTT; its weights are the outer-learned initialization
     dataset: BatchedInContextRecallDataset,
     inner_opt: MetaOptimizer,
     lr_head: nn.Module | torch.Tensor | float,          # inner learning rate head
     loss_weight_head: nn.Module | torch.Tensor | float, # LossWeightHead
     inner_param_dict: Dict[str, torch.Tensor], # inner optimizer hyperparameters
+    outer_window_size: int = 1,
     eval_mode = False
 ):
     # Get device from the first parameter of the module
@@ -170,6 +171,8 @@ def unroll_with_inner_param_dict(
     full_inputs = inputs
     full_targets = targets
 
+    predictions = []
+
     for t in range(seq_len):
         key_window, value_window = dataset[t] # of shapes (B, ctx_window, key_dim), (B, ctx_window, val_dim)
         
@@ -206,11 +209,23 @@ def unroll_with_inner_param_dict(
                 seq_keys,
                 seq_values,
                 time_index=t,
-                window_size=1,
+                window_size=outer_window_size,
                 loss_fn=F.cross_entropy
             )
 
         per_sample_outer = vmap(outer_loss_fn)(theta, full_inputs, full_targets)
         outer_loss = outer_loss + per_sample_outer.mean()
 
-    return outer_loss
+        def batch_functional_call(module, batched_params, inputs):
+            return vmap(lambda params: functional_call(module, params, inputs))(batched_params)
+                
+        if eval_mode:
+            pred_t = []
+            for i in range(t+1):
+                key_window, _ = dataset[i]
+                pred_t.append(batch_functional_call(memory_module, theta, key_window))
+            predictions.append(torch.stack(pred_t, dim=1))
+
+    return outer_loss, predictions
+
+

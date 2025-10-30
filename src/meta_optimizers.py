@@ -57,7 +57,7 @@ class MetaOptimizer(ABC):
         pass
 
 
-class ManualAdam(MetaOptimizer):
+class MetaAdam(MetaOptimizer):
     """A manual, differentiable implementation of the Adam optimizer."""
     def __init__(self):
         pass
@@ -113,7 +113,7 @@ class ManualAdam(MetaOptimizer):
         return new_params, new_states
 
 
-class ManualSGD(MetaOptimizer):
+class MetaSGD(MetaOptimizer):
     """A manual, differentiable implementation of SGD with momentum."""
     def __init__(self):
         pass
@@ -146,7 +146,7 @@ class ManualSGD(MetaOptimizer):
         new_states = {'v': new_v}
         return new_params, new_states
 
-class ManualAdamW(MetaOptimizer):
+class MetaAdamW(MetaOptimizer):
     """A manual, differentiable implementation of the AdamW optimizer with decoupled weight decay."""
     def __init__(self):
         pass

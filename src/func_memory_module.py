@@ -130,7 +130,7 @@ class HyperparamModel(nn.Module):
 
 class LearnableHyperparam(nn.Module):
     """A learnable scalar hyperparameter."""
-    def __init__(self, initial_value: float = 0.5):
+    def __init__(self, initial_value: float = -2.2):
         super().__init__()
         self.param = nn.Parameter(torch.tensor(initial_value))
 

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import Any, Dict, Tuple
-from src.meta_optimizers import MetaOptimizer, ManualAdamW
+from src.meta_optimizers import MetaOptimizer, MetaAdamW
 from src.losses import windowed_recall_cross_entropy
 
 
@@ -21,7 +21,7 @@ def test_manual_adamw():
     }
     
     # Manual
-    manual_opt = ManualAdamW()
+    manual_opt = MetaAdamW()
     states = manual_opt.init_states(params)
     new_params_m, new_states_m = manual_opt.step(params, grads, states, **hyperparams)
     
@@ -47,7 +47,7 @@ def test_differentiability():
     params = {'w': torch.tensor([1.0, 2.0], requires_grad=True)}
     hyperparams = {'lr': 0.01, 'beta1': 0.9, 'beta2': 0.999, 'epsilon': 1e-8, 'weight_decay': 0.0}
     
-    manual_opt = ManualAdamW()
+    manual_opt = MetaAdamW()
     states = manual_opt.init_states(params)
     
     # Simulate inner loop: multiple steps with synthetic grads
