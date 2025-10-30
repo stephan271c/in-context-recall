@@ -10,7 +10,7 @@ wheels/
 .venv
 
 #folder
-.ignore
+.ignore/
 
 # toy scripts
 simple*.py
