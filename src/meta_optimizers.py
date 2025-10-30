@@ -4,21 +4,6 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Tuple, Any, Dict, Mapping
 
 
-# def _match_batch_shape(value: Any, reference: torch.Tensor) -> Any:
-#     """Broadcast ``value`` so it is compatible with ``reference`` shapes."""
-#     if not isinstance(value, torch.Tensor):
-#         return value
-#     if value.device != reference.device:
-#         value = value.to(reference.device)
-#     extra_dims = reference.dim() - value.dim()
-#     if extra_dims < 0:
-#         raise ValueError(
-#             "Hyperparameter tensor has more dimensions than reference parameter."
-#         )
-#     if extra_dims > 0:
-#         value = value.view(value.shape + (1,) * extra_dims)
-#     return value
-
 class MetaOptimizer(ABC):
     """
     Abstract base class for manual, differentiable inner-loop optimizers.

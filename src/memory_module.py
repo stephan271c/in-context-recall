@@ -10,25 +10,6 @@ from synthetic_datasets import BatchedInContextRecallDataset
 from func_memory_module import LearnableHyperparam
 
 
-class MemoryModule(nn.Module, ABC):
-    @abstractmethod
-    def forward(self, keys, values, **kwargs):
-        """"Produces next hidden state of memory module. may involve metaoptimization.
-
-        Args:
-            keys: Input tensor(s)
-            values: Previous hidden state(s)
-
-        Returns:
-            Next hidden state(s)
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def output(self, x):
-        """Produces output from hidden state of memory module"""
-        raise NotImplementedError
-
 class TTT(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, num_layers: int = 2):
         super().__init__()
@@ -227,5 +208,3 @@ def inner_optimization_forward(
             predictions.append(torch.stack(pred_t, dim=1))
 
     return outer_loss, predictions
-
-
