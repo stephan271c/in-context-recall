@@ -135,11 +135,14 @@ def inner_optimization_forward(
     states = _broadcast_state_tree(inner_opt.init_states(base_params), effective_batch, device)
 
     # these are inner optimizer hyperparameters that do not change per step. lr can change
-    static_hparams = {k: v for k, v in inner_param_dict.items() if k != 'lr'}
-    static_hparams = {
-        k: val.to(device) if torch.is_tensor(val) else val
+    if inner_opt_kwargs is None:
+        static_hparams = {}
+    else:
+        static_hparams = {k: v for k, v in inner_opt_kwargs.items() if k != 'lr'}
+        static_hparams = {
+        k: val.to(device) if torch.is_tensor(val) else val # move to device. Some hyperparams are trainable tensors
         for k, val in static_hparams.items()
-    }
+        }
 
     def single_inner_loss(params: Dict[str, torch.Tensor], key_window: torch.Tensor, value_window: torch.Tensor, weight_vec: torch.Tensor) -> torch.Tensor:
         predictions = functional_call(memory_module, params, key_window)
