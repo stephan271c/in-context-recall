@@ -148,7 +148,7 @@ def inner_optimization_forward(
         predictions = functional_call(memory_module, params, key_window)
         return windowed_p_loss(predictions.T, value_window.T, weight_vec)
 
-    grad_fn = vmap(grad(single_inner_loss))
+    grad_fn = vmap(grad(single_inner_loss), in_dims=(0, 0, 0, 0))
 
     outer_loss = torch.zeros((), device=device)
 
@@ -185,7 +185,7 @@ def inner_optimization_forward(
         def inner_step(params, grad_dict, state, lr_scalar):
             return inner_opt.step(params, grad_dict, state, lr=lr_scalar, **static_hparams)
 
-        theta, states = vmap(inner_step)(theta, grads, states, lr_values)
+        theta, states = vmap(inner_step, in_dims= (0, 0, 0, 0))(theta, grads, states, lr_values)
 
         def outer_loss_fn(params, seq_keys, seq_values):
             return windowed_recall_cross_entropy(
@@ -198,7 +198,7 @@ def inner_optimization_forward(
                 loss_fn=F.cross_entropy
             )
 
-        per_sample_outer = vmap(outer_loss_fn)(theta, full_inputs, full_targets)
+        per_sample_outer = vmap(outer_loss_fn, in_dims=(0, 0, 0))(theta, full_inputs, full_targets)
         outer_loss = outer_loss + per_sample_outer.mean()
 
         def batch_functional_call(module, batched_params, inputs):
