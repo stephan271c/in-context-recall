@@ -108,7 +108,7 @@ def inner_optimization_forward(
     inner_opt: MetaOptimizer,
     lr_head: nn.Module | torch.Tensor | float,          # inner learning rate head
     loss_weight_head: nn.Module | torch.Tensor, # weights for inner loss
-    inner_param_dict: Dict[str, torch.Tensor], # inner optimizer hyperparameters
+    inner_opt_kwargs: Dict[str, torch.Tensor] | None = None, # inner optimizer hyperparameters
     outer_window_size: int = 1,
     eval_mode = False
 ):
