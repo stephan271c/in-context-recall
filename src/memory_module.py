@@ -107,7 +107,7 @@ def inner_optimization_forward(
     dataset: BatchedInContextRecallDataset,
     inner_opt: MetaOptimizer,
     lr_head: nn.Module | torch.Tensor | float,          # inner learning rate head
-    loss_weight_head: nn.Module | torch.Tensor | float, # LossWeightHead
+    loss_weight_head: nn.Module | torch.Tensor, # weights for inner loss
     inner_param_dict: Dict[str, torch.Tensor], # inner optimizer hyperparameters
     outer_window_size: int = 1,
     eval_mode = False
@@ -125,7 +125,7 @@ def inner_optimization_forward(
 
     # we expect inputs and targets to be 3D tensors: (B, seq_len, key/val-dim)
     if inputs.dim() != 3 or targets.dim() != 3:
-        raise ValueError(f"Expected dataset inputs to have 2 or 3 dims, got {inputs.dim()}.")
+        raise ValueError(f"Expected dataset inputs to have 3 dims, got {inputs.dim()}.")
 
     effective_batch = inputs.shape[0]
     seq_len = inputs.shape[1]
@@ -161,9 +161,9 @@ def inner_optimization_forward(
         current_keys = key_window[:, -1]
 
         if isinstance(loss_weight_head, nn.Module):
-            loss_weight = loss_weight_head(current_keys)
+            loss_weight = loss_weight_head(current_keys) # shape (B, context_window)
         else:
-            loss_weight = loss_weight_head
+            loss_weight = loss_weight_head # shape (context_window,)
             
         loss_weights = _ensure_batch_vector(loss_weight, effective_batch, window_length, device, "loss_weight")
 
@@ -171,11 +171,12 @@ def inner_optimization_forward(
 
         if isinstance(lr_head, nn.Module):
             if isinstance(lr_head, LearnableHyperparam):
-                lr_values = lr_head()
+                lr_values = lr_head() # shape (1,)
             else:
-                lr_values = lr_head(current_keys)
+                lr_values = lr_head(current_keys) # shape (B,)
         else:
-            lr_values = lr_head
+            lr_values = lr_head # float
+        # of shape (B,)
         lr_values = _ensure_batch_vector(lr_values, effective_batch, 1, device, "learning_rate").squeeze(-1)
 
         def inner_step(params, grad_dict, state, lr_scalar):
@@ -198,13 +199,15 @@ def inner_optimization_forward(
         outer_loss = outer_loss + per_sample_outer.mean()
 
         def batch_functional_call(module, batched_params, inputs):
-            return vmap(lambda params: functional_call(module, params, inputs))(batched_params)
+            # The lambda function has TWO arguments: `params` and `inp`.
+            mapped_fn = lambda params, inp: functional_call(module, params, (inp,))
+
+            # We tell vmap to map over the 0-th axis of BOTH arguments.
+            return vmap(mapped_fn, in_dims=(0, 0))(batched_params, inputs)
                 
         if eval_mode:
-            pred_t = []
-            for i in range(t+1):
-                key_window, _ = dataset[i]
-                pred_t.append(batch_functional_call(memory_module, theta, key_window))
-            predictions.append(torch.stack(pred_t, dim=1))
+            keys, _ = dataset[:t+1] # keys shape (B, t+1, key_dim)
+            output_preds = batch_functional_call(memory_module, theta, keys) # subbatching over time
+            predictions.append(output_preds)
 
     return outer_loss, predictions
