@@ -17,37 +17,25 @@ class LinearAttentionMemory(nn.Module):
 
     def forward(self, keys: torch.Tensor) -> torch.Tensor:
         """Forward pass: predict values for given keys using accumulated outer products."""
-        # keys shape: (batch_size, key_dim) or (seq_len, key_dim)
-        # Return predictions: (batch_size, val_dim) or (seq_len, val_dim)
+        # keys shape: (seq_len, key_dim)
+        # Return predictions: (seq_len, val_dim)
         outputs = (self.cumulative_matrix @ keys.T).T
         return outputs
 
     def update(self, key: torch.Tensor, value: torch.Tensor):
         """Update the cumulative matrix with a new key-value pair."""
-        # Allow callers to pass either a single vector or a context window.
-        with torch.no_grad():
-            key_tensor = key
-            value_tensor = value
+        if key.ndim != 1 or value.ndim != 1:
+            raise ValueError(
+                f"Expected 1D key/value tensors, got {key.shape} and {value.shape}"
+            )
 
-            if key_tensor.ndim == 2 and value_tensor.ndim == 2:
-                if key_tensor.shape[0] != value_tensor.shape[0]:
-                    raise ValueError(
-                        f"Key/value window length mismatch: {key_tensor.shape[0]} vs {value_tensor.shape[0]}"
-                    )
-                key_tensor = key_tensor[-1]
-                value_tensor = value_tensor[-1]
-            elif key_tensor.ndim != 1 or value_tensor.ndim != 1:
-                raise ValueError(
-                    f"Expected 1D key/value tensors or 2D context windows, got {key_tensor.shape} and {value_tensor.shape}"
-                )
+        if key.numel() != self.key_dim:
+            raise ValueError(f"Key has {key.numel()} elements, expected {self.key_dim}")
+        if value.numel() != self.val_dim:
+            raise ValueError(f"Value has {value.numel()} elements, expected {self.val_dim}")
 
-            if key_tensor.numel() != self.key_dim:
-                raise ValueError(f"Key has {key_tensor.numel()} elements, expected {self.key_dim}")
-            if value_tensor.numel() != self.val_dim:
-                raise ValueError(f"Value has {value_tensor.numel()} elements, expected {self.val_dim}")
-
-            # Accumulate outer product: M += value @ key.T
-            self.cumulative_matrix += torch.outer(value_tensor, key_tensor)
+        # Accumulate outer product: M += value @ key.T
+        self.cumulative_matrix += torch.outer(value, key)
 
     def reset(self):
         """Reset the cumulative matrix to zeros."""
@@ -114,7 +102,7 @@ class HyperparamModel(nn.Module):
 
     def forward(self, current_key: torch.Tensor) -> torch.Tensor:
         # Sigmoid ensures output is between (0, 1)
-        return torch.sigmoid(self.scaler(current_key)).squeeze(-1)
+        return torch.sigmoid(self.scaler(current_key)).squeeze(-1) # shape (B,)
 
 class LearnableHyperparam(nn.Module):
     """A learnable scalar hyperparameter."""
