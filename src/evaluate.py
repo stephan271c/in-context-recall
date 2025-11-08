@@ -167,9 +167,9 @@ def correct_retrieval_counts_by_timestep(
         raise ValueError("accuracy_history is empty")
     
     device = accuracy_history[0].device
-    counts = torch.zeros(len(accuracy_history), dtype=torch.float32, device=device)
+    counts = torch.zeros(len(accuracy_history), device=device)
     for t, accuracy_tensor in enumerate(accuracy_history):
         if accuracy_tensor.dim() != 2:
             raise ValueError(f"Each tensor in accuracy_history must be 2D with shape (B, t+1), got shape {accuracy_tensor.shape}")
-        counts[t] = torch.sum(accuracy_tensor.mean(dim=0))
+        counts[t] = torch.sum(accuracy_tensor.sum(dim=0))
     return counts
