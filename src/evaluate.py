@@ -171,5 +171,5 @@ def correct_retrieval_counts_by_timestep(
     for t, accuracy_tensor in enumerate(accuracy_history):
         if accuracy_tensor.dim() != 2:
             raise ValueError(f"Each tensor in accuracy_history must be 2D with shape (B, t+1), got shape {accuracy_tensor.shape}")
-        counts[t] = torch.sum(accuracy_tensor.sum(dim=0))
+        counts[t] = torch.sum(accuracy_tensor.mean(dim=0)) # take average along batch dimension
     return counts
