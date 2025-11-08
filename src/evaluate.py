@@ -108,7 +108,10 @@ def average_accuracy_by_offset(
     # Aggregate along batch dimension and prepare offset-based accuracies
     all_offset_accuracies: List[torch.Tensor] = []
 
-    B = accuracy_history[0].shape[0] if accuracy_history else 0
+    reference_tensor = accuracy_history[0]
+    B = reference_tensor.shape[0]
+    device = reference_tensor.device
+    dtype = reference_tensor.dtype
 
     for t, accuracy_tensor in enumerate(accuracy_history):
         if accuracy_tensor.dim() != 2:
@@ -130,7 +133,7 @@ def average_accuracy_by_offset(
         return torch.empty(0), torch.empty(0, dtype=torch.long)
 
     # Create a padded tensor with NaN for missing values
-    padded = torch.full((len(all_offset_accuracies), max_len), float('nan'))
+    padded = torch.full((len(all_offset_accuracies), max_len), float('nan'), device=device, dtype=dtype)
 
     for i, t in enumerate(all_offset_accuracies):
         if t.dim() != 1:
@@ -138,8 +141,8 @@ def average_accuracy_by_offset(
         padded[i, :len(t)] = t
 
     # Compute mean and counts for each offset
-    mean_accuracy = torch.full((max_len,), float('nan'))
-    counts = torch.zeros((max_len,), dtype=torch.long)
+    mean_accuracy = torch.full((max_len,), float('nan'), device=device, dtype=dtype)
+    counts = torch.zeros((max_len,), dtype=torch.long, device=device)
 
     for i in range(max_len):
         values = padded[:, i]
