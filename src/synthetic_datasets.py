@@ -134,6 +134,20 @@ class BatchedInContextRecallDataset(Dataset):
     def __len__(self) -> int:
         return self.seq_len
 
+    def to(self, device: Union[str, torch.device]) -> 'BatchedInContextRecallDataset':
+        """
+        Move all tensors in the dataset to the specified device.
+
+        Args:
+            device: The device to move the tensors to (e.g., 'cpu', 'cuda', 'cuda:0')
+
+        Returns:
+            Self for method chaining
+        """
+        self.inputs = self.inputs.to(device)
+        self.targets = self.targets.to(device)
+        return self
+
 
 def generate_vectors(
         num_examples: int,
@@ -150,7 +164,8 @@ def generate_vectors(
     Returns:
         A tensor of shape (num_examples, dim).
     """
-    assert 0.0 <= correlation <= 1.0, "Correlation must be between 0.0 and 1.0"
+    if not 0.0 <= correlation <= 1.0:
+        raise ValueError("Correlation must be between 0.0 and 1.0")
 
     if correlation == 0.0:
         random_vectors = torch.randn(num_examples, dim)
