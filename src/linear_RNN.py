@@ -58,12 +58,9 @@ class LinearAttentionMemory:
         return torch.zeros(batch_size, val_dim, key_dim)
 
 class MesaLayerMemory:
-    """Batched Mesa-layer memory implementing discounted Sherman-Morrison updates.
+    """Batched Mesa-layer memory implementing discounted Sherman-Morrison updates."""
 
-    This is a functional version (not nn.Module) that processes batches efficiently.
-    """
-
-    def __init__(self, key_dim: int, val_dim: int, batch_size: int, lam: float = 1.0, epsilon: float = 1e-6):
+    def __init__(self, key_dim: int, val_dim: int, lam: float = 1.0, epsilon: float = 1e-6):
         """Initialize the batched Mesa memory parameters.
 
         Args:
@@ -77,7 +74,6 @@ class MesaLayerMemory:
         self.val_dim = val_dim
         self.lambda_init = lam
         self.epsilon = epsilon
-        self.batch_size = batch_size
 
     @staticmethod
     def forward_fn(phi_matrix: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
@@ -124,8 +120,17 @@ class MesaLayerMemory:
         if key.ndim != 2 or value.ndim != 2:
             raise ValueError("key and value must be 2D tensors")
 
+        device = key.device
+        R_matrix = R_matrix.to(device)
+        S_matrix = S_matrix.to(device)
+        phi_matrix = phi_matrix.to(device)
+        if isinstance(gamma, torch.Tensor):
+            gamma = gamma.to(device)
+        else:
+            gamma = torch.tensor(gamma, device=device, dtype=key.dtype)
+
         # Compute Rk for each batch element: (batch_size, key_dim)
-        Rk = torch.einsum('bkk, bk -> bk', R_matrix, key)
+        Rk = torch.einsum('bij, bj -> bi', R_matrix, key)
 
         # Compute denominator: (batch_size,)
         denom = 1.0 + torch.einsum('bk, bk -> b', key, Rk)
@@ -144,7 +149,7 @@ class MesaLayerMemory:
             S_matrix = torch.einsum('b, bvk -> bvk', gamma, S_matrix) + torch.einsum('bv, bk -> bvk', value, key)
 
         # Update phi_matrix: S @ R
-        phi_matrix = torch.einsum('bvk, bkk -> bvk', S_matrix, R_matrix)
+        phi_matrix = torch.einsum('bvk, bkj -> bvj', S_matrix, R_matrix)
 
         return R_matrix, S_matrix, phi_matrix
 
@@ -179,4 +184,3 @@ class MesaLayerMemory:
         phi_matrix = torch.zeros(batch_size, self.val_dim, self.key_dim, device=device)
 
         return R_matrix, S_matrix, phi_matrix
-
