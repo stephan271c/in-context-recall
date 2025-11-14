@@ -7,11 +7,11 @@ from abc import ABC, abstractmethod
 from meta_optimizers import MetaOptimizer
 from losses import windowed_p_loss, windowed_recall_cross_entropy
 from synthetic_datasets import BatchedInContextRecallDataset
-from func_memory_module import LearnableHyperparam
+from model_components import LearnableHyperparam
 
 
 class TTT(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, num_layers: int = 2):
+    def __init__(self, input_dim: int, output_dim: int, num_layers: int = 2, init_var: float = 0.02):
         super().__init__()
         if num_layers < 1:
             raise ValueError("num_layers must be at least 1")
@@ -28,17 +28,19 @@ class TTT(nn.Module):
         dims.append(self.output_dim)
 
         self.weights = nn.ParameterList([
-            nn.Parameter(torch.normal(0, 0.02, size=(in_dim, out_dim)))
+            nn.Parameter(torch.normal(0, init_var, size=(in_dim, out_dim)))
             for in_dim, out_dim in zip(dims[:-1], dims[1:])
         ])
         self.biases = nn.ParameterList([
-            nn.Parameter(torch.zeros(1, out_dim))
-            for out_dim in dims[1:]
+            nn.Parameter(torch.zeros(1, out_dim)) if idx > 0 else None
+            for idx, out_dim in enumerate(dims[1:])
         ])
 
     def forward(self, x):
         for idx, (weight, bias) in enumerate(zip(self.weights, self.biases)):
-            x = torch.matmul(x, weight) + bias
+            x = torch.matmul(x, weight)
+            if bias is not None:
+                x = x + bias
             if idx < self.num_layers - 1:
                 x = F.gelu(x)
         return x
@@ -101,7 +103,6 @@ def _ensure_batch_vector(value: torch.Tensor | float, batch_size: int, length: i
     return tensor
 
 # forward pass unrolling sequence
-@torch.enable_grad()
 def inner_optimization_forward(
     memory_module: nn.Module,   # e.g., TTT; its weights are the outer-learned initialization
     dataset: BatchedInContextRecallDataset,
