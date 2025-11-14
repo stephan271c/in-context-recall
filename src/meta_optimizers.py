@@ -110,7 +110,7 @@ class MetaSGD(MetaOptimizer):
     def step(self, params: Dict[str, torch.Tensor], grads: Dict[str, torch.Tensor], states: Dict[str, Any], **hyperparams: Any) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         v = states['v']
         lr = hyperparams['lr']
-        beta = hyperparams.get('beta', 0.9)
+        beta = hyperparams.get('beta', 0)
 
         new_v = {}
         new_params = {}
