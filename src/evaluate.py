@@ -41,7 +41,9 @@ def compute_recall_accuracies(
     sequence_length = len(predictions)
 
     if values.dim() != 3:
-        raise ValueError("values tensor must be 3-dimensional (B, sequence_length, value_dim)")
+        raise ValueError(
+            "values tensor must be 3-dimensional (B, sequence_length, value_dim)"
+        )
 
     if values.shape[1] != sequence_length:
         raise ValueError(
@@ -61,7 +63,12 @@ def compute_recall_accuracies(
     with torch.no_grad():
         for t in range(sequence_length):
             pred = predictions[t]
-            if pred.ndim != 3 or pred.shape[0] != B or pred.shape[1] != t + 1 or pred.shape[2] != value_dim:
+            if (
+                pred.ndim != 3
+                or pred.shape[0] != B
+                or pred.shape[1] != t + 1
+                or pred.shape[2] != value_dim
+            ):
                 raise ValueError(
                     f"predictions[{t}] must have shape ({B}, {t+1}, {value_dim}); "
                     f"received shape {tuple(pred.shape)}"
@@ -69,7 +76,7 @@ def compute_recall_accuracies(
 
             window_values = values[:, : t + 1]
 
-            logits = torch.einsum('b t v, b s v -> b t s', pred, window_values)
+            logits = torch.einsum("b t v, b s v -> b t s", pred, window_values)
             predicted_indices = logits.argmax(dim=-1)
             target_indices = torch.arange(t + 1, device=pred.device).expand(B, -1)
             per_key_accuracy = (predicted_indices == target_indices).to(torch.float32)
@@ -115,7 +122,9 @@ def average_accuracy_by_offset(
 
     for t, accuracy_tensor in enumerate(accuracy_history):
         if accuracy_tensor.dim() != 2:
-            raise ValueError(f"Each tensor in accuracy_history must be 2D with shape (B, t+1), got shape {accuracy_tensor.shape}")
+            raise ValueError(
+                f"Each tensor in accuracy_history must be 2D with shape (B, t+1), got shape {accuracy_tensor.shape}"
+            )
 
         # Average along batch dimension
         mean_accuracy_tensor = accuracy_tensor.mean(dim=0)  # shape (t+1,)
@@ -133,15 +142,19 @@ def average_accuracy_by_offset(
         return torch.empty(0), torch.empty(0, dtype=torch.long)
 
     # Create a padded tensor with NaN for missing values
-    padded = torch.full((len(all_offset_accuracies), max_len), float('nan'), device=device, dtype=dtype)
+    padded = torch.full(
+        (len(all_offset_accuracies), max_len), float("nan"), device=device, dtype=dtype
+    )
 
     for i, t in enumerate(all_offset_accuracies):
         if t.dim() != 1:
-            raise ValueError(f"Each flattened tensor must be one-dimensional, got shape {t.shape}")
-        padded[i, :len(t)] = t
+            raise ValueError(
+                f"Each flattened tensor must be one-dimensional, got shape {t.shape}"
+            )
+        padded[i, : len(t)] = t
 
     # Compute mean and counts for each offset
-    mean_accuracy = torch.full((max_len,), float('nan'), device=device, dtype=dtype)
+    mean_accuracy = torch.full((max_len,), float("nan"), device=device, dtype=dtype)
     counts = torch.zeros((max_len,), dtype=torch.long, device=device)
 
     for i in range(max_len):
@@ -153,7 +166,7 @@ def average_accuracy_by_offset(
 
 
 def correct_retrieval_counts_by_timestep(
-        accuracy_history: Sequence[torch.Tensor],
+    accuracy_history: Sequence[torch.Tensor],
 ) -> torch.Tensor:
     """Count the number of correct retrievals for each timestep in a batch of sequences.
 
@@ -164,15 +177,19 @@ def correct_retrieval_counts_by_timestep(
 
     Returns:
         A 1D tensor of shape ``(seq_len,)`` containing the number of correct
-        retrievals for each timestep. 
+        retrievals for each timestep.
     """
     if not accuracy_history:
         raise ValueError("accuracy_history is empty")
-    
+
     device = accuracy_history[0].device
     counts = torch.zeros(len(accuracy_history), device=device)
     for t, accuracy_tensor in enumerate(accuracy_history):
         if accuracy_tensor.dim() != 2:
-            raise ValueError(f"Each tensor in accuracy_history must be 2D with shape (B, t+1), got shape {accuracy_tensor.shape}")
-        counts[t] = torch.sum(accuracy_tensor.mean(dim=0)) # take average along batch dimension
+            raise ValueError(
+                f"Each tensor in accuracy_history must be 2D with shape (B, t+1), got shape {accuracy_tensor.shape}"
+            )
+        counts[t] = torch.sum(
+            accuracy_tensor.mean(dim=0)
+        )  # take average along batch dimension
     return counts

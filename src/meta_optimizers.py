@@ -9,6 +9,7 @@ class MetaOptimizer(ABC):
     Abstract base class for manual, differentiable inner-loop optimizers.
 
     """
+
     @abstractmethod
     def init_states(self, params: Mapping[str, torch.Tensor]) -> Dict[str, Any]:
         """
@@ -23,7 +24,13 @@ class MetaOptimizer(ABC):
         pass
 
     @abstractmethod
-    def step(self, params: Dict[str, torch.Tensor], grads: Dict[str, torch.Tensor], states: Dict[str, Any], **hyperparams: Any) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
+    def step(
+        self,
+        params: Dict[str, torch.Tensor],
+        grads: Dict[str, torch.Tensor],
+        states: Dict[str, Any],
+        **hyperparams: Any,
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """
         Performs a single, differentiable optimization step functionally.
 
@@ -44,30 +51,37 @@ class MetaOptimizer(ABC):
 
 class MetaAdam(MetaOptimizer):
     """A manual, differentiable implementation of the Adam optimizer."""
+
     def __init__(self):
         pass
 
     def init_states(self, params: Dict[str, torch.Tensor]) -> Dict[str, Any]:
         return {
-            'm': {name: torch.zeros_like(p) for name, p in params.items()},
-            'v': {name: torch.zeros_like(p) for name, p in params.items()},
-            't': 0
+            "m": {name: torch.zeros_like(p) for name, p in params.items()},
+            "v": {name: torch.zeros_like(p) for name, p in params.items()},
+            "t": 0,
         }
 
-    def step(self, params: Dict[str, torch.Tensor], grads: Dict[str, torch.Tensor], states: Dict[str, Any], **hyperparams: Any) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
-        m = states['m']
-        v = states['v']
-        t = states['t'] + 1
-        lr = hyperparams['lr']
-        beta1 = hyperparams['beta1']
-        beta2 = hyperparams['beta2']
-        epsilon = hyperparams.get('epsilon', 1e-8)
+    def step(
+        self,
+        params: Dict[str, torch.Tensor],
+        grads: Dict[str, torch.Tensor],
+        states: Dict[str, Any],
+        **hyperparams: Any,
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
+        m = states["m"]
+        v = states["v"]
+        t = states["t"] + 1
+        lr = hyperparams["lr"]
+        beta1 = hyperparams["beta1"]
+        beta2 = hyperparams["beta2"]
+        epsilon = hyperparams.get("epsilon", 1e-8)
 
         new_params = {}
         new_m = {}
         new_v = {}
-        beta1_pow_t = beta1 ** t
-        beta2_pow_t = beta2 ** t
+        beta1_pow_t = beta1**t
+        beta2_pow_t = beta2**t
 
         for name, p in params.items():
             g = grads.get(name, None)
@@ -78,7 +92,7 @@ class MetaAdam(MetaOptimizer):
                 continue
 
             m_i = beta1 * m[name] + (1 - beta1) * g
-            v_i = beta2 * v[name] + (1 - beta2) * (g ** 2)
+            v_i = beta2 * v[name] + (1 - beta2) * (g**2)
 
             m_hat = m_i / (1 - beta1_pow_t)
             v_hat = v_i / (1 - beta2_pow_t)
@@ -90,27 +104,29 @@ class MetaAdam(MetaOptimizer):
             new_m[name] = m_i
             new_v[name] = v_i
 
-        new_states = {
-            'm': new_m,
-            'v': new_v,
-            't': t
-        }
+        new_states = {"m": new_m, "v": new_v, "t": t}
         return new_params, new_states
 
 
 class MetaSGD(MetaOptimizer):
     """A manual, differentiable implementation of SGD with momentum."""
+
     def __init__(self):
         pass
-    def init_states(self, params: Dict[str, torch.Tensor]) -> Dict[str, Any]:
-        return {
-            'v': {name: torch.zeros_like(p) for name, p in params.items()}
-        }
 
-    def step(self, params: Dict[str, torch.Tensor], grads: Dict[str, torch.Tensor], states: Dict[str, Any], **hyperparams: Any) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
-        v = states['v']
-        lr = hyperparams['lr']
-        beta = hyperparams.get('beta', 0)
+    def init_states(self, params: Dict[str, torch.Tensor]) -> Dict[str, Any]:
+        return {"v": {name: torch.zeros_like(p) for name, p in params.items()}}
+
+    def step(
+        self,
+        params: Dict[str, torch.Tensor],
+        grads: Dict[str, torch.Tensor],
+        states: Dict[str, Any],
+        **hyperparams: Any,
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
+        v = states["v"]
+        lr = hyperparams["lr"]
+        beta = hyperparams.get("beta", 0)
 
         new_v = {}
         new_params = {}
@@ -128,36 +144,44 @@ class MetaSGD(MetaOptimizer):
             new_params[name] = new_p
             new_v[name] = v_i
 
-        new_states = {'v': new_v}
+        new_states = {"v": new_v}
         return new_params, new_states
+
 
 class MetaAdamW(MetaOptimizer):
     """A manual, differentiable implementation of the AdamW optimizer with decoupled weight decay."""
+
     def __init__(self):
         pass
 
     def init_states(self, params: Dict[str, torch.Tensor]) -> Dict[str, Any]:
         return {
-            'm': {name: torch.zeros_like(p) for name, p in params.items()},
-            'v': {name: torch.zeros_like(p) for name, p in params.items()},
-            't': 0
+            "m": {name: torch.zeros_like(p) for name, p in params.items()},
+            "v": {name: torch.zeros_like(p) for name, p in params.items()},
+            "t": 0,
         }
 
-    def step(self, params: Dict[str, torch.Tensor], grads: Dict[str, torch.Tensor], states: Dict[str, Any], **hyperparams: Any) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
-        m = states['m']
-        v = states['v']
-        t = states['t'] + 1
-        lr = hyperparams['lr']
-        beta1 = hyperparams['beta1']
-        beta2 = hyperparams['beta2']
-        epsilon = hyperparams.get('epsilon', 1e-8)
-        weight_decay = hyperparams.get('weight_decay', 0.0)
+    def step(
+        self,
+        params: Dict[str, torch.Tensor],
+        grads: Dict[str, torch.Tensor],
+        states: Dict[str, Any],
+        **hyperparams: Any,
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
+        m = states["m"]
+        v = states["v"]
+        t = states["t"] + 1
+        lr = hyperparams["lr"]
+        beta1 = hyperparams["beta1"]
+        beta2 = hyperparams["beta2"]
+        epsilon = hyperparams.get("epsilon", 1e-8)
+        weight_decay = hyperparams.get("weight_decay", 0.0)
 
         new_params = {}
         new_m = {}
         new_v = {}
-        beta1_pow_t = beta1 ** t
-        beta2_pow_t = beta2 ** t
+        beta1_pow_t = beta1**t
+        beta2_pow_t = beta2**t
 
         for name, p in params.items():
             g = grads.get(name, None)
@@ -171,7 +195,7 @@ class MetaAdamW(MetaOptimizer):
 
             # Update moments with raw gradient only
             m_i = beta1 * m[name] + (1 - beta1) * g
-            v_i = beta2 * v[name] + (1 - beta2) * (g ** 2)
+            v_i = beta2 * v[name] + (1 - beta2) * (g**2)
 
             # Bias correction
             m_hat = m_i / (1 - beta1_pow_t)
@@ -191,9 +215,5 @@ class MetaAdamW(MetaOptimizer):
             new_m[name] = m_i
             new_v[name] = v_i
 
-        new_states = {
-            'm': new_m,
-            'v': new_v,
-            't': t
-        }
+        new_states = {"m": new_m, "v": new_v, "t": t}
         return new_params, new_states

@@ -5,31 +5,55 @@ from torch.func import functional_call
 from functools import wraps
 from typing import Callable, Dict, Optional
 
+
 # --- Validation Decorator ---
 def validate_loss_inputs(func):
     """
     A decorator that validates shapes for loss functions expecting
     (predictions, targets, weights) as the first three arguments.
     """
+
     @wraps(func)
-    def wrapper(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None, *args, **kwargs):
+    def wrapper(
+        predictions: torch.Tensor,
+        targets: torch.Tensor,
+        weights: torch.Tensor | None = None,
+        *args,
+        **kwargs,
+    ):
         if predictions.dim() != 2:
-            raise ValueError(f"Expected predictions to be a 2D tensor, but got {predictions.dim()} dimensions.")
+            raise ValueError(
+                f"Expected predictions to be a 2D tensor, but got {predictions.dim()} dimensions."
+            )
         if predictions.shape != targets.shape:
-            raise ValueError(f"Predictions and targets must have the same shape, but got {predictions.shape} and {targets.shape}.")
+            raise ValueError(
+                f"Predictions and targets must have the same shape, but got {predictions.shape} and {targets.shape}."
+            )
 
         if weights is not None:
             if weights.dim() != 1:
-                raise ValueError(f"Expected weights to be a 1D tensor, but got {weights.dim()} dimensions.")
+                raise ValueError(
+                    f"Expected weights to be a 1D tensor, but got {weights.dim()} dimensions."
+                )
             if weights.shape[0] != predictions.shape[1]:
-                raise ValueError(f"Weights length ({weights.shape[0]}) must match the window_size dimension of predictions ({predictions.shape[1]}).")
+                raise ValueError(
+                    f"Weights length ({weights.shape[0]}) must match the window_size dimension of predictions ({predictions.shape[1]})."
+                )
 
         # If all checks pass, call the original function
         return func(predictions, targets, weights, *args, **kwargs)
+
     return wrapper
 
+
 @validate_loss_inputs
-def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None, p: int = 2, reg_coef: float = 0.0) -> torch.Tensor:
+def windowed_p_loss(
+    predictions: torch.Tensor,
+    targets: torch.Tensor,
+    weights: torch.Tensor | None = None,
+    p: int = 2,
+    reg_coef: float = 0.0,
+) -> torch.Tensor:
     """
     computes weighted L_p^p-loss over a window with optional L2 regularization on weights.
 
@@ -51,15 +75,22 @@ def windowed_p_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: t
 
     # --- Add regularization term ---
     if weights is not None and reg_coef > 0:
-        reg_term = reg_coef * torch.sum(weights ** 2)  # Frobenius norm squared for 1D tensor
+        reg_term = reg_coef * torch.sum(
+            weights**2
+        )  # Frobenius norm squared for 1D tensor
         final_loss = data_loss + reg_term
     else:
         final_loss = data_loss
 
     return final_loss
 
+
 @validate_loss_inputs
-def windowed_inner_product_loss(predictions: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor | None = None) -> float:
+def windowed_inner_product_loss(
+    predictions: torch.Tensor,
+    targets: torch.Tensor,
+    weights: torch.Tensor | None = None,
+) -> float:
     """
     computes inner-loss over a window.
 
@@ -69,8 +100,9 @@ def windowed_inner_product_loss(predictions: torch.Tensor, targets: torch.Tensor
         weights: tensor of shape (window_size)
         p: int
     """
-            
+
     return 0.0
+
 
 # for outer loss
 def windowed_recall_cross_entropy(
@@ -80,7 +112,7 @@ def windowed_recall_cross_entropy(
     all_values: torch.Tensor,
     time_index: int,
     window_size: int = 1,
-    loss_fn = None,
+    loss_fn=None,
 ) -> torch.Tensor:
     """Computes a windowed recall loss that scores previous key/value pairs.
 
@@ -108,12 +140,14 @@ def windowed_recall_cross_entropy(
     if window_size <= 0:
         raise ValueError("window_size must be a positive integer")
     if time_index < 0 or time_index >= all_keys.shape[0]:
-        raise IndexError(f"time_index {time_index} is out of bounds for keys of length {all_keys.shape[0]}")
+        raise IndexError(
+            f"time_index {time_index} is out of bounds for keys of length {all_keys.shape[0]}"
+        )
     if not params:
         raise ValueError("params dictionary must not be empty")
 
     start_index = max(0, time_index - window_size + 1)
-    key_window = all_keys[start_index: time_index + 1]
+    key_window = all_keys[start_index : time_index + 1]
     value_matrix = all_values
 
     params_device = next(iter(params.values())).device

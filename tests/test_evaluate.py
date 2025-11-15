@@ -2,13 +2,14 @@
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import torch
 from evaluate import (
     compute_recall_accuracies,
     average_accuracy_by_offset,
-    correct_retrieval_counts_by_timestep
+    correct_retrieval_counts_by_timestep,
 )
 from synthetic_datasets import generate_vectors
 
@@ -25,7 +26,7 @@ def test_compute_recall_accuracies_perfect_predictions():
     # Create predictions that exactly match the values
     predictions = []
     for t in range(seq_len):
-        pred_t = values[:, :t+1].clone()
+        pred_t = values[:, : t + 1].clone()
         predictions.append(pred_t)
 
     accuracies = compute_recall_accuracies(predictions, values)
@@ -78,12 +79,12 @@ def test_compute_recall_accuracies_device_handling():
     for b in range(B):
         values_cpu[b] = generate_vectors(seq_len, value_dim, correlation=0.0)
 
-    device = torch.device('cuda', torch.cuda.current_device())
+    device = torch.device("cuda", torch.cuda.current_device())
     values_gpu = values_cpu.to(device)
 
     predictions = []
     for t in range(seq_len):
-        pred_t = values_gpu[:, :t+1].clone()
+        pred_t = values_gpu[:, : t + 1].clone()
         predictions.append(pred_t)
 
     # Should not raise an error and should move values to correct device
@@ -105,7 +106,7 @@ def test_compute_recall_accuracies_error_cases():
 
     # Test wrong values dimensions
     values = torch.randn(B, seq_len)  # Missing value_dim
-    predictions = [torch.randn(B, t+1, value_dim) for t in range(seq_len)]
+    predictions = [torch.randn(B, t + 1, value_dim) for t in range(seq_len)]
 
     try:
         compute_recall_accuracies(predictions, values)
@@ -140,7 +141,9 @@ def test_average_accuracy_by_offset_perfect():
 
     # Perfect accuracy should give mean of 1.0 for all offsets that occur
     valid_mask = ~torch.isnan(mean_accuracy)
-    assert torch.allclose(mean_accuracy[valid_mask], torch.ones_like(mean_accuracy[valid_mask]))
+    assert torch.allclose(
+        mean_accuracy[valid_mask], torch.ones_like(mean_accuracy[valid_mask])
+    )
 
 
 def test_average_accuracy_by_offset_mixed_accuracy():
@@ -176,7 +179,7 @@ def test_average_accuracy_by_offset_preserves_device():
         return
 
     B, seq_len = 2, 3
-    device = torch.device('cuda', torch.cuda.current_device())
+    device = torch.device("cuda", torch.cuda.current_device())
     accuracy_history = []
     for t in range(seq_len):
         acc_t = torch.ones(B, t + 1, device=device)
@@ -235,12 +238,14 @@ def test_correct_retrieval_counts_pipeline_integration():
 
     predictions = []
     for t in range(seq_len):
-        predictions.append(values[:, :t + 1].clone())
+        predictions.append(values[:, : t + 1].clone())
 
     accuracy_history = compute_recall_accuracies(predictions, values)
     counts = correct_retrieval_counts_by_timestep(accuracy_history)
 
-    expected = torch.tensor([(t + 1) for t in range(seq_len)], dtype=counts.dtype, device=counts.device)
+    expected = torch.tensor(
+        [(t + 1) for t in range(seq_len)], dtype=counts.dtype, device=counts.device
+    )
     assert torch.allclose(counts, expected)
 
 
