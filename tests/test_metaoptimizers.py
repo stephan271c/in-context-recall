@@ -1,8 +1,10 @@
+from typing import Any, Dict, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Any, Dict, Tuple
-from src.meta_optimizers import MetaOptimizer, MetaAdamW
+
 from src.losses import windowed_recall_cross_entropy
+from src.meta_optimizers import MetaAdamW, MetaOptimizer
 
 
 def test_manual_adamw():

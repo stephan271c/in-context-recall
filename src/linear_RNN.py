@@ -1,10 +1,11 @@
+from abc import ABC, abstractmethod
+from typing import Callable, Dict, Sequence
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import vmap
 from torch.func import functional_call
-from typing import Callable, Dict, Sequence
-import torch.nn.functional as F
-from abc import ABC, abstractmethod
 
 
 class LinearRNN(ABC):

@@ -1,6 +1,7 @@
+from typing import Callable, Dict, List, Tuple, Union
+
 import torch
 from torch.utils.data import Dataset
-from typing import Tuple, Callable, Union, List, Dict
 
 
 class InContextRecallDataset(Dataset):

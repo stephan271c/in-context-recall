@@ -1,7 +1,8 @@
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Iterable, Mapping, Tuple
+
 import torch
 import torch.nn as nn
-from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Any, Dict, Mapping
 
 
 class MetaOptimizer(ABC):

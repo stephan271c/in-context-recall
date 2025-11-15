@@ -1,13 +1,15 @@
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, Iterable, Mapping, Sequence
+
 import torch
 import torch.nn as nn
-from torch.func import functional_call, vmap, grad
-from typing import Callable, Dict, Sequence, Iterable, Any, Mapping
 import torch.nn.functional as F
-from abc import ABC, abstractmethod
-from meta_optimizers import MetaOptimizer
+from torch.func import functional_call, grad, vmap
+
 from losses import windowed_p_loss, windowed_recall_cross_entropy
-from synthetic_datasets import BatchedInContextRecallDataset
+from meta_optimizers import MetaOptimizer
 from model_components import LearnableHyperparam
+from synthetic_datasets import BatchedInContextRecallDataset
 
 
 class TTT(nn.Module):

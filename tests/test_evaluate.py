@@ -1,16 +1,14 @@
 """Unit tests for evaluation functions in evaluate.py"""
 
-import sys
 import os
+import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import torch
-from evaluate import (
-    compute_recall_accuracies,
-    average_accuracy_by_offset,
-    correct_retrieval_counts_by_timestep,
-)
+
+from evaluate import (average_accuracy_by_offset, compute_recall_accuracies,
+                      correct_retrieval_counts_by_timestep)
 from synthetic_datasets import generate_vectors
 
 
