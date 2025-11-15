@@ -1,11 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Sequence
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch import vmap
-from torch.func import functional_call
 
 
 class LinearRNN(ABC):
@@ -23,21 +18,18 @@ class LinearRNN(ABC):
         """
         Forward pass of the RNN.
         """
-        pass
 
     @abstractmethod
     def update(self, *args, **kwargs):
         """
         Update the RNN state based on new input.
         """
-        pass
 
     @abstractmethod
     def init_state(self, *args, **kwargs):
         """
         Initialize the RNN state.
         """
-        pass
 
 
 class LinearAttentionMemory(LinearRNN):

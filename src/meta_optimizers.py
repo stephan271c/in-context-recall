@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Mapping, Tuple
+from typing import Any, Dict, Mapping, Tuple
 
 import torch
-import torch.nn as nn
 
 
 class MetaOptimizer(ABC):
@@ -22,7 +21,6 @@ class MetaOptimizer(ABC):
         Returns:
             Dict containing initial states (e.g., momentum, variance).
         """
-        pass
 
     @abstractmethod
     def step(
@@ -47,7 +45,6 @@ class MetaOptimizer(ABC):
         Returns:
             Tuple of (new_params: Dict[str, torch.Tensor], new_states: Dict[str, Any])
         """
-        pass
 
 
 class MetaAdam(MetaOptimizer):
