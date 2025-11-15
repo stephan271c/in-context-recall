@@ -7,9 +7,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import torch
 
-from evaluate import (average_accuracy_by_offset, compute_recall_accuracies,
-                      correct_retrieval_counts_by_timestep)
-from synthetic_datasets import generate_vectors
+from src.evaluate import (average_accuracy_by_offset,
+                          compute_recall_accuracies,
+                          correct_retrieval_counts_by_timestep)
+from src.synthetic_datasets import generate_vectors
 
 
 def test_compute_recall_accuracies_perfect_predictions():

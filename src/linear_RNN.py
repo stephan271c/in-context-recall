@@ -14,7 +14,7 @@ class LinearRNN(ABC):
     """
 
     @abstractmethod
-    def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs) -> torch.Tensor:
         """
         Forward pass of the RNN.
         """
@@ -57,6 +57,8 @@ class LinearAttentionMemory(LinearRNN):
             return torch.einsum("bvk, btk -> btv", cumulative_matrix, keys)
         elif keys.ndim == 2:  # single timestep
             return torch.einsum("bvk, bk -> bv", cumulative_matrix, keys)
+        else:
+            raise ValueError("keys must be 2D or 3D tensor")
 
     # Functional update: takes cumulative_matrix as input, returns updated
     @staticmethod
