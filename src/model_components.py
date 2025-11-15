@@ -15,8 +15,11 @@ class HyperparamModel(nn.Module):
 
 
 class LearnableHyperparam(nn.Module):
-    """A learnable scalar hyperparameter."""
-    def __init__(self, initial_value: float = -2.2):
+    """A learnable scalar hyperparameter.
+    
+    The initial value is set so that the sigmoid output defaults to 0.1
+    """
+    def __init__(self, initial_value: float = -2.1972):
         super().__init__()
         self.param = nn.Parameter(torch.tensor(initial_value))
 
