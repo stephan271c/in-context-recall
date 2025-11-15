@@ -4,9 +4,40 @@ from torch import vmap
 from torch.func import functional_call
 from typing import Callable, Dict, Sequence
 import torch.nn.functional as F
+from abc import ABC, abstractmethod
 
+class LinearRNN(ABC):
+    """
+    Abstract base class for manually defined linear RNNs.
 
-class LinearAttentionMemory:
+    All concrete implementations must implement the following methods:
+    - forward: Forward pass computation
+    - update: State update mechanism
+    - init_state: Initialize the RNN state
+    """
+
+    @abstractmethod
+    def forward(self, *args, **kwargs):
+        """
+        Forward pass of the RNN.
+        """
+        pass
+
+    @abstractmethod
+    def update(self, *args, **kwargs):
+        """
+        Update the RNN state based on new input.
+        """
+        pass
+
+    @abstractmethod
+    def init_state(self, *args, **kwargs):
+        """
+        Initialize the RNN state.
+        """
+        pass
+
+class LinearAttentionMemory(LinearRNN):
     """linear attention memory module that accumulates key-value associations."""
     
     def __init__(self, key_dim: int, val_dim: int, batch_size: int):
@@ -15,7 +46,7 @@ class LinearAttentionMemory:
         self.batch_size = batch_size
     # Functional forward: takes cumulative_matrix as input
     @staticmethod
-    def forward_fn(cumulative_matrix: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
+    def forward(cumulative_matrix: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
         """Forward pass: predict values for given keys using accumulated outer products.
         
         Args:
@@ -34,7 +65,7 @@ class LinearAttentionMemory:
 
     # Functional update: takes cumulative_matrix as input, returns updated
     @staticmethod
-    def update_fn(cumulative_matrix: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+    def update(cumulative_matrix: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         """Update the cumulative matrix with a new key-value pair.
         
         Args:
@@ -53,11 +84,11 @@ class LinearAttentionMemory:
             raise ValueError("cumulative_matrix must be batched (3D tensor) for update_fn")
     
     @staticmethod
-    def init_cumulative_matrix(batch_size: int, val_dim: int, key_dim: int) -> torch.Tensor:
+    def init_state(batch_size: int, val_dim: int, key_dim: int) -> torch.Tensor:
         """Initialize batched cumulative matrices."""
         return torch.zeros(batch_size, val_dim, key_dim)
 
-class MesaLayerMemory:
+class MesaLayerMemory(LinearRNN):
     """Batched Mesa-layer memory implementing discounted Sherman-Morrison updates."""
 
     def __init__(self, key_dim: int, val_dim: int, lam: float = 1.0, epsilon: float = 1e-6):
@@ -76,7 +107,7 @@ class MesaLayerMemory:
         self.epsilon = epsilon
 
     @staticmethod
-    def forward_fn(phi_matrix: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
+    def forward(phi_matrix: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
         """Forward pass: predict values for given keys using current phi matrix.
 
         Args:
@@ -97,7 +128,7 @@ class MesaLayerMemory:
             raise ValueError("keys must be 2D or 3D tensor")
 
     @staticmethod
-    def update_fn(R_matrix: torch.Tensor, S_matrix: torch.Tensor, phi_matrix: torch.Tensor,
+    def update(R_matrix: torch.Tensor, S_matrix: torch.Tensor, phi_matrix: torch.Tensor,
                   key: torch.Tensor, value: torch.Tensor, gamma: torch.Tensor,
                   epsilon: float = 1e-6) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Update the memory matrices with a new (key, value, gamma) triple.
@@ -149,8 +180,7 @@ class MesaLayerMemory:
         # Compute outer product of Rk: (batch_size, key_dim, key_dim)
         outer_Rk = torch.einsum('bk, bl -> bkl', Rk, Rk)
 
-        # Update R_matrix with exponential forgetting on the covariance
-        # see eq (17) of https://arxiv.org/pdf/2309.05858
+        # Update R_matrix, see eq (17) of https://arxiv.org/pdf/2309.05858
         R_matrix = (R_matrix - outer_Rk / denom.unsqueeze(-1).unsqueeze(-1)) / gamma_matrix
 
         # Update S_matrix: gamma * S + outer_product(value, key)
@@ -161,7 +191,7 @@ class MesaLayerMemory:
 
         return R_matrix, S_matrix, phi_matrix
 
-    def init_matrices(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def init_state(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Initialize the three memory matrices for a batch.
 
         Args:
@@ -177,18 +207,3 @@ class MesaLayerMemory:
 
         return R_matrix, S_matrix, phi_matrix
 
-    def reset_matrices(self, batch_size: int, device: torch.device = torch.device('cpu')) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Reset the memory matrices to initial state.
-
-        Args:
-            batch_size: Size of the batch
-            device: Device to place tensors on
-
-        Returns:
-            (R_matrix, S_matrix, phi_matrix): Reset matrices
-        """
-        R_matrix = self.lambda_init * torch.eye(self.key_dim, device=device).unsqueeze(0).expand(batch_size, -1, -1).clone()
-        S_matrix = torch.zeros(batch_size, self.val_dim, self.key_dim, device=device)
-        phi_matrix = torch.zeros(batch_size, self.val_dim, self.key_dim, device=device)
-
-        return R_matrix, S_matrix, phi_matrix
