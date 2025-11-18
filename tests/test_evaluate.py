@@ -1,10 +1,3 @@
-"""Unit tests for evaluation functions in evaluate.py"""
-
-import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-
 import torch
 
 from src.evaluate import (average_accuracy_by_offset,
