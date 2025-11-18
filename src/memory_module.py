@@ -5,10 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.func import functional_call, grad, vmap
 
-from losses import windowed_p_loss, windowed_recall_cross_entropy
-from meta_optimizers import MetaOptimizer
-from model_components import LearnableHyperparam
-from synthetic_datasets import BatchedInContextRecallDataset
+from src.losses import windowed_p_loss, windowed_recall_cross_entropy
+from src.meta_optimizers import MetaOptimizer
+from src.model_components import LearnableHyperparam
+from src.synthetic_datasets import BatchedInContextRecallDataset
 
 
 class TTT(nn.Module):
