@@ -176,8 +176,8 @@ def generate_vectors(
     Returns:
         A tensor of shape (num_examples, dim).
     """
-    if not 0.0 <= correlation <= 1.0:
-        raise ValueError("Correlation must be between 0.0 and 1.0")
+    if not -1.0 <= correlation <= 1.0:
+        raise ValueError("Correlation must be between -1 and 1")
 
     if correlation == 0.0:
         random_vectors = torch.randn(num_examples, dim)
