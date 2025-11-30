@@ -28,9 +28,9 @@ This is a PyTorch-based sandbox for in-context recall and meta-optimization expe
 2. Install runtime dependencies:
    ```bash
    pip install \
-     ipykernel>=6.0.0 \
-     matplotlib>=3.5.0 \
-     torch>=2.0.0
+     ipykernel~=7.1.0 \
+     matplotlib~=3.10.7 \
+     torch~=2.9.1
    ```
 3. (Optional) Install developer tooling:
    ```bash
