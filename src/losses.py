@@ -112,7 +112,6 @@ def windowed_recall_cross_entropy(
     all_values: torch.Tensor,
     time_index: int,
     window_size: int = 1,
-    loss_fn=None,
 ) -> torch.Tensor:
     """Computes a windowed recall loss that scores previous key/value pairs.
 
@@ -120,7 +119,7 @@ def windowed_recall_cross_entropy(
     ``window_size`` keys (including the current key) and applies a classification
     loss against every stored value vector. The scores are computed by taking the
     dot-product between each predicted value and the matrix of known value
-    vectors, mirroring the original outer-loss computation.
+    vectors.
 
     Args:
         model: The differentiable memory model to evaluate.
@@ -131,8 +130,6 @@ def windowed_recall_cross_entropy(
         window_size: Number of timesteps to include in the recall window. The
             window always includes the current timestep; values larger than the
             number of seen steps are automatically clamped.
-        loss_fn: Callable used to score the logits. Defaults to
-            ``nn.CrossEntropyLoss`` if omitted.
 
     Returns:
         A scalar tensor containing the averaged recall loss over the window.
@@ -161,5 +158,4 @@ def windowed_recall_cross_entropy(
     logits = predictions @ value_matrix.T
     target_indices = torch.arange(start_index, time_index + 1, device=params_device)
 
-    loss_fn = loss_fn or F.cross_entropy
-    return loss_fn(logits, target_indices)
+    return F.cross_entropy(logits, target_indices)
