@@ -6,7 +6,6 @@ import torch.nn.functional as F
 from torch.func import functional_call
 
 
-# --- Validation Decorator ---
 def validate_loss_inputs(func):
     """
     A decorator that validates shapes for loss functions expecting
@@ -112,11 +111,12 @@ def windowed_recall_cross_entropy(
     all_values: torch.Tensor,
     time_index: int,
     window_size: int = 1,
+    offset: int = 0,
 ) -> torch.Tensor:
     """Computes a windowed recall loss that scores previous key/value pairs.
 
     For a given ``time_index``, this helper evaluates the model on the most recent
-    ``window_size`` keys (including the current key) and applies a classification
+    ``window_size`` keys shifted back by ``offset`` steps and applies a classification
     loss against every stored value vector. The scores are computed by taking the
     dot-product between each predicted value and the matrix of known value
     vectors.
@@ -127,15 +127,20 @@ def windowed_recall_cross_entropy(
         all_keys: Tensor of shape (sequence_length, key_dim) containing every key.
         all_values: Tensor of shape (sequence_length, value_dim) containing every value.
         time_index: Index of the current timestep (0-based).
-        window_size: Number of timesteps to include in the recall window. The
-            window always includes the current timestep; values larger than the
-            number of seen steps are automatically clamped.
+        window_size: Number of timesteps to include in the recall window. values 
+            larger than the number of seen steps are automatically clamped.
+        offset: Number of steps to shift the recall window backwards. The window
+            ends at ``time_index - offset``.
 
     Returns:
-        A scalar tensor containing the averaged recall loss over the window.
+        A scalar tensor containing the averaged recall loss over the window. If
+        ``time_index - offset <= 0`` (i.e., not enough prior steps), returns a
+        zero loss on the correct device/dtype.
     """
     if window_size <= 0:
         raise ValueError("window_size must be a positive integer")
+    if offset < 0:
+        raise ValueError("offset must be a non-negative integer")
     if time_index < 0 or time_index >= all_keys.shape[0]:
         raise IndexError(
             f"time_index {time_index} is out of bounds for keys of length {all_keys.shape[0]}"
@@ -143,11 +148,18 @@ def windowed_recall_cross_entropy(
     if not params:
         raise ValueError("params dictionary must not be empty")
 
-    start_index = max(0, time_index - window_size + 1)
-    key_window = all_keys[start_index : time_index + 1]
+    example_param = next(iter(params.values()))
+    params_device = example_param.device
+    params_dtype = example_param.dtype
+
+    window_end = time_index - offset
+    if window_end <= 0:
+        return torch.zeros((), device=params_device, dtype=params_dtype)
+
+    start_index = max(0, window_end - window_size)
+    key_window = all_keys[start_index:window_end]
     value_matrix = all_values
 
-    params_device = next(iter(params.values())).device
     key_window = key_window.to(params_device)
     value_matrix = value_matrix.to(params_device)
 
@@ -156,6 +168,6 @@ def windowed_recall_cross_entropy(
         predictions = predictions.unsqueeze(0)
 
     logits = predictions @ value_matrix.T
-    target_indices = torch.arange(start_index, time_index + 1, device=params_device)
+    target_indices = torch.arange(start_index, window_end, device=params_device)
 
     return F.cross_entropy(logits, target_indices)

@@ -141,6 +141,7 @@ def inner_optimization_forward(
         Dict[str, torch.Tensor] | None
     ) = None,
     outer_window_size: int = 1,
+    offset: int = 0,
     eval_mode=False,
 ):
     first_param = next(memory_module.parameters())
@@ -242,6 +243,7 @@ def inner_optimization_forward(
                 seq_values,
                 time_index=t,
                 window_size=outer_window_size,
+                offset=offset
             )
 
         per_sample_outer = vmap(outer_loss_fn, in_dims=(0, 0, 0))(

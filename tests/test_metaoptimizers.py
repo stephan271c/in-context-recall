@@ -90,26 +90,99 @@ def test_windowed_recall_cross_entropy_matches_manual():
     }
     keys = torch.eye(2)
     values = keys.clone()
-    loss_fn = nn.CrossEntropyLoss()
+    time_index = 1
+    window_size = 2
+    offset = 0
 
     loss = windowed_recall_cross_entropy(
         model,
         params,
         keys,
         values,
-        time_index=1,
-        window_size=2,
-        loss_fn=loss_fn,
+        time_index=time_index,
+        window_size=window_size,
+        offset=offset,
     )
 
-    manual_logits = torch.matmul(keys, values.T)
-    targets = torch.tensor([0, 1])
-    expected_loss = loss_fn(manual_logits, targets)
+    window_end = time_index - offset
+    start_index = max(0, window_end - window_size)
+    manual_logits = torch.matmul(keys[start_index:window_end], values.T)
+    targets = torch.arange(start_index, window_end)
+    expected_loss = nn.functional.cross_entropy(manual_logits, targets)
 
     assert torch.allclose(loss, expected_loss)
 
     loss.backward()
     assert all(param.grad is not None for param in params.values())
+
+
+def test_windowed_recall_cross_entropy_respects_offset():
+    model = nn.Linear(2, 2, bias=False)
+    with torch.no_grad():
+        model.weight.copy_(torch.eye(2))
+
+    params = {
+        name: p.clone().detach().requires_grad_(True)
+        for name, p in model.named_parameters()
+    }
+    keys = torch.tensor(
+        [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, -1.0]]
+    )
+    values = keys.clone()
+
+    baseline_loss = windowed_recall_cross_entropy(
+        model,
+        params,
+        keys,
+        values,
+        time_index=3,
+        window_size=2,
+        offset=0,
+    )
+
+    offset_loss = windowed_recall_cross_entropy(
+        model,
+        params,
+        keys,
+        values,
+        time_index=3,
+        window_size=2,
+        offset=1,
+    )
+
+    window_end = 3 - 1
+    start_index = max(0, window_end - 2)
+    manual_logits = torch.matmul(keys[start_index:window_end], values.T)
+    targets = torch.arange(start_index, window_end)
+    expected_offset_loss = nn.functional.cross_entropy(manual_logits, targets)
+
+    assert torch.allclose(offset_loss, expected_offset_loss)
+    assert not torch.allclose(baseline_loss, offset_loss)
+
+
+def test_windowed_recall_cross_entropy_returns_zero_if_offset_exceeds_time():
+    model = nn.Linear(2, 2, bias=False)
+    with torch.no_grad():
+        model.weight.copy_(torch.eye(2))
+
+    params = {
+        name: p.clone().detach().requires_grad_(True)
+        for name, p in model.named_parameters()
+    }
+    keys = torch.eye(2)
+    values = keys.clone()
+
+    loss = windowed_recall_cross_entropy(
+        model,
+        params,
+        keys,
+        values,
+        time_index=0,
+        window_size=2,
+        offset=5,
+    )
+
+    assert loss.item() == 0.0
 
 
 if __name__ == "__main__":
