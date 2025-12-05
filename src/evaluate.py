@@ -1,5 +1,3 @@
-"""Refactored utilities to measure recall accuracy for differentiable memory modules."""
-
 from typing import List, Sequence, Tuple
 
 import torch
@@ -54,7 +52,6 @@ def compute_recall_accuracies(
     value_dim = values.shape[2]
     B = values.shape[0]
 
-    # Infer device from first prediction
     eval_device = predictions[0].device
     values = values.to(eval_device)
 
@@ -112,7 +109,6 @@ def average_accuracy_by_offset(
     if not accuracy_history:
         raise ValueError("accuracy_history is empty")
 
-    # Aggregate along batch dimension and prepare offset-based accuracies
     all_offset_accuracies: List[torch.Tensor] = []
 
     reference_tensor = accuracy_history[0]
@@ -132,16 +128,13 @@ def average_accuracy_by_offset(
         # Flip along the last dimension to get offset view (offset 0 = most recent)
         offset_accuracies = mean_accuracy_tensor.flip(-1)
 
-        # Add to list (one per timestep, already aggregated over batch)
         all_offset_accuracies.append(offset_accuracies)
 
-    # Find the maximum length among all offset tensors
     max_len = max(len(t) for t in all_offset_accuracies) if all_offset_accuracies else 0
 
     if max_len == 0:
         return torch.empty(0), torch.empty(0, dtype=torch.long)
 
-    # Create a padded tensor with NaN for missing values
     padded = torch.full(
         (len(all_offset_accuracies), max_len), float("nan"), device=device, dtype=dtype
     )
@@ -153,7 +146,6 @@ def average_accuracy_by_offset(
             )
         padded[i, : len(t)] = t
 
-    # Compute mean and counts for each offset
     mean_accuracy = torch.full((max_len,), float("nan"), device=device, dtype=dtype)
     counts = torch.zeros((max_len,), dtype=torch.long, device=device)
 

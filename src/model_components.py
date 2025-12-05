@@ -11,7 +11,6 @@ class HyperparamModel(nn.Module):
         torch.nn.init.constant_(self.scaler.bias, initial_bias)
 
     def forward(self, current_key: torch.Tensor) -> torch.Tensor:
-        # Sigmoid ensures output is between (0, 1)
         return torch.sigmoid(self.scaler(current_key)).squeeze(-1)  # shape (B,)
 
 
@@ -26,7 +25,6 @@ class LearnableHyperparam(nn.Module):
         self.param = nn.Parameter(torch.tensor(initial_value))
 
     def forward(self) -> torch.Tensor:
-        # Ignore current_key; just return the learned parameter
         return torch.sigmoid(self.param)
 
 
@@ -44,7 +42,6 @@ class WeightModel(nn.Module):
         return self.net(x)
 
     def _init_weights(self):
-        # self.modules() iterates through all modules in the network
         # using xavier since we use sigmoid activations
         for m in self.modules():
             if isinstance(m, nn.Linear):

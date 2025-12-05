@@ -191,21 +191,16 @@ class MetaAdamW(MetaOptimizer):
                 new_v[name] = v[name]
                 continue
 
-            # Update moments with raw gradient only
             m_i = beta1 * m[name] + (1 - beta1) * g
             v_i = beta2 * v[name] + (1 - beta2) * (g**2)
 
-            # Bias correction
             m_hat = m_i / (1 - beta1_pow_t)
             v_hat = v_i / (1 - beta2_pow_t)
 
-            # Adam update term
             adam_step = m_hat / (v_hat.sqrt() + epsilon)
 
-            # Decoupled weight decay term
             wd_step = weight_decay * p
 
-            # Combined update
             update_step = adam_step + wd_step
             new_p = p - lr * update_step
 

@@ -192,8 +192,7 @@ def generate_vectors(
             )
     norms = torch.linalg.norm(random_vectors, ord=2, dim=-1, keepdim=True)
 
-    # Normalize the vectors by dividing by their norm.
-    # A small epsilon (1e-8) is added for numerical stability
+    # Normalize the vectors by dividing by their norm
     unit_vectors = random_vectors / (norms + 1e-8)
 
     return unit_vectors

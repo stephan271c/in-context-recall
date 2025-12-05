@@ -40,7 +40,6 @@ class LinearAttentionMemory(LinearRNN):
         self.val_dim = val_dim
         self.batch_size = batch_size
 
-    # Functional forward: takes cumulative_matrix as input
     @staticmethod
     def forward(cumulative_matrix: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
         """Forward pass: predict values for given keys using accumulated outer products.
@@ -52,15 +51,13 @@ class LinearAttentionMemory(LinearRNN):
         Returns:
             outputs: (batch_size, seq_len, val_dim)
         """
-        # Use einsum for batch-aware matrix multiplication
-        if keys.ndim == 3:  # across the sequence
+        if keys.ndim == 3:
             return torch.einsum("bvk, btk -> btv", cumulative_matrix, keys)
-        elif keys.ndim == 2:  # single timestep
+        elif keys.ndim == 2:
             return torch.einsum("bvk, bk -> bv", cumulative_matrix, keys)
         else:
             raise ValueError("keys must be 2D or 3D tensor")
 
-    # Functional update: takes cumulative_matrix as input, returns updated
     @staticmethod
     def update(
         cumulative_matrix: torch.Tensor, key: torch.Tensor, value: torch.Tensor
@@ -75,8 +72,7 @@ class LinearAttentionMemory(LinearRNN):
         Returns:
             updated_cumulative_matrix: Same shape as input
         """
-        if cumulative_matrix.ndim == 3:  # Batched
-            # Vectorized outer product: value[:, None, :] @ key[:, :, None] but simplified
+        if cumulative_matrix.ndim == 3:
             outer = torch.einsum("bv, bk -> bvk", value, key)
             return cumulative_matrix + outer
         else:
@@ -180,14 +176,11 @@ class MesaLayerMemory(LinearRNN):
 
         gamma_matrix = gamma_batch.unsqueeze(-1).unsqueeze(-1)
 
-        # Compute Rk for each batch element: (batch_size, key_dim)
         Rk = torch.einsum("bij, bj -> bi", R_matrix, key)
 
-        # Compute denominator: (batch_size,)
         denom = gamma_batch + torch.einsum("bk, bk -> b", key, Rk)
         denom = denom + epsilon
 
-        # Compute outer product of Rk: (batch_size, key_dim, key_dim)
         outer_Rk = torch.einsum("bk, bl -> bkl", Rk, Rk)
 
         # Update R_matrix, see eq (17) of https://arxiv.org/pdf/2309.05858
@@ -195,10 +188,8 @@ class MesaLayerMemory(LinearRNN):
             R_matrix - outer_Rk / denom.unsqueeze(-1).unsqueeze(-1)
         ) / gamma_matrix
 
-        # Update S_matrix: gamma * S + outer_product(value, key)
         S_matrix = gamma_matrix * S_matrix + torch.einsum("bv, bk -> bvk", value, key)
 
-        # Update phi_matrix: S @ R
         phi_matrix = torch.einsum("bvk, bkj -> bvj", S_matrix, R_matrix)
 
         return R_matrix, S_matrix, phi_matrix
