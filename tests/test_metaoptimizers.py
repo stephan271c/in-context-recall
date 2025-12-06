@@ -10,8 +10,11 @@ def test_manual_adamw():
     import torch.optim as optim
 
     # Setup
-    params = {"w": torch.tensor([1.0, 2.0], requires_grad=True)}
-    grads = {"w": torch.tensor([0.1, 0.2])}
+    params = {
+        "w": torch.tensor([1.0, 2.0], requires_grad=True),
+        "b": torch.tensor([3.0, 4.0], requires_grad=True),
+    }
+    grads = {"w": torch.tensor([0.1, 0.2])}  # no grad for b
     hyperparams = {
         "lr": 0.01,
         "beta1": 0.9,
@@ -38,14 +41,8 @@ def test_manual_adamw():
     torch_params[0].grad = grads["w"]
     torch_opt.step()
 
-    # Compare (with tolerance for floating point)
-    torch.manual_seed(0)  # For reproducibility
     assert torch.allclose(new_params_m["w"], torch_params[0], atol=1e-6)
-    print("ManualAdamW matches torch.optim.AdamW!")
-
-
-if __name__ == "__main__":
-    test_manual_adamw()
+    assert torch.allclose(new_params_m["b"], torch_params[1], atol=1e-6)
 
 
 def test_differentiability():
@@ -61,14 +58,14 @@ def test_differentiability():
 
     manual_opt = MetaAdamW()
     states = manual_opt.init_states(params)
+    grads_history = []
 
     # Simulate inner loop: multiple steps with synthetic grads
     for _ in range(3):
-        # Synthetic grad (e.g., from a loss)
         grads = {"w": torch.tensor([0.1, 0.2], requires_grad=True)}
+        grads_history.append(grads["w"])
         params, states = manual_opt.step(params, grads, states, **hyperparams)
 
-    # Compute a loss on final params to check if grad_fn exists
     params["w"].retain_grad()
     loss = params["w"].sum()
     loss.backward()
@@ -76,7 +73,7 @@ def test_differentiability():
     # Check if gradients are populated and grad_fn exists
     assert params["w"].grad is not None
     assert loss.grad_fn is not None
-    print("Differentiability verified: Gradients flow through ManualAdamW steps!")
+    assert all(g.grad is not None for g in grads_history)
 
 
 def test_windowed_recall_cross_entropy_matches_manual():
@@ -183,9 +180,3 @@ def test_windowed_recall_cross_entropy_returns_zero_if_offset_exceeds_time():
     )
 
     assert loss.item() == 0.0
-
-
-if __name__ == "__main__":
-    test_manual_adamw()
-    test_differentiability()
-    test_windowed_recall_cross_entropy_matches_manual()

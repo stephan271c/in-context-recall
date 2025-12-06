@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from src.evaluate import (average_accuracy_by_offset,
@@ -27,12 +28,14 @@ def test_compute_recall_accuracies_perfect_predictions():
     for t, acc in enumerate(accuracies):
         assert acc.shape == (B, t + 1)
         # With the exact same vectors, we should get perfect accuracy
-        assert torch.allclose(acc, torch.ones_like(acc), atol=1e-5)
+        assert torch.allclose(acc, torch.ones_like(acc))
 
 
 def test_compute_recall_accuracies_with_imperfect_predictions():
     """Test compute_recall_accuracies with imperfect predictions."""
-    B, seq_len, value_dim = 30, 40, 50
+    torch.manual_seed(42)
+
+    B, seq_len, value_dim = 100, 40, 50
 
     # Create values using generate_vectors
     values = torch.zeros(B, seq_len, value_dim)
@@ -55,14 +58,13 @@ def test_compute_recall_accuracies_with_imperfect_predictions():
         # With random predictions, accuracy should be around chance level (1/(t+1))
         chance_level = 1.0 / (t + 1)
         # Allow some tolerance around chance level
-        assert abs(acc.mean().item() - chance_level) < 0.3
+        assert abs(acc.mean().item() - chance_level) < 0.1
 
 
 def test_compute_recall_accuracies_device_handling():
     """Test that compute_recall_accuracies handles device mismatch correctly."""
     if not torch.cuda.is_available():
-        print("Skipping device handling test: CUDA not available.")
-        return
+        pytest.skip("CUDA not available.")
 
     B, seq_len, value_dim = 4, 5, 6
 
@@ -90,29 +92,24 @@ def test_compute_recall_accuracies_error_cases():
     B, seq_len, value_dim = 20, 30, 40
 
     # Test empty predictions
-    try:
+    with pytest.raises(ValueError, match="predictions list must not be empty"):
         compute_recall_accuracies([], torch.randn(B, seq_len, value_dim))
-        assert False, "Should have raised ValueError for empty predictions"
-    except ValueError as e:
-        assert "predictions list must not be empty" in str(e)
 
     # Test wrong values dimensions
     values = torch.randn(B, seq_len)  # Missing value_dim
     predictions = [torch.randn(B, t + 1, value_dim) for t in range(seq_len)]
 
-    try:
+    with pytest.raises(
+        ValueError, match="values tensor must be 3-dimensional"
+    ):
         compute_recall_accuracies(predictions, values)
-        assert False, "Should have raised ValueError for wrong values dimensions"
-    except ValueError as e:
-        assert "values tensor must be 3-dimensional" in str(e)
 
     # Test sequence length mismatch
     values = torch.randn(B, seq_len + 1, value_dim)  # Wrong sequence length
-    try:
+    with pytest.raises(
+        ValueError, match="Number of predictions must match sequence_length"
+    ):
         compute_recall_accuracies(predictions, values)
-        assert False, "Should have raised ValueError for sequence length mismatch"
-    except ValueError as e:
-        assert "Number of predictions must match sequence_length" in str(e)
 
 
 def test_average_accuracy_by_offset_perfect():
@@ -136,11 +133,17 @@ def test_average_accuracy_by_offset_perfect():
     assert torch.allclose(
         mean_accuracy[valid_mask], torch.ones_like(mean_accuracy[valid_mask])
     )
+    expected_counts = torch.tensor(
+        [(seq_len - i) * B for i in range(seq_len)],
+        device=counts.device,
+        dtype=counts.dtype,
+    )
+    assert torch.equal(counts, expected_counts)
 
 
 def test_average_accuracy_by_offset_mixed_accuracy():
     """Test average_accuracy_by_offset with varying accuracy."""
-    B, seq_len = 20, 30
+    B, seq_len = 2, 4
 
     # Create mixed accuracy history
     accuracy_history = []
@@ -154,21 +157,28 @@ def test_average_accuracy_by_offset_mixed_accuracy():
     assert len(mean_accuracy) == seq_len
     assert len(counts) == seq_len
 
+    # Expected means per offset after flip: [0.75, 0.5333..., 0.4, 0.3]
+    expected_mean = torch.tensor([0.75, 0.53333336, 0.4, 0.3])
+    assert torch.allclose(mean_accuracy, expected_mean)
+
+    expected_counts = torch.tensor(
+        [(seq_len - i) * B for i in range(seq_len)],
+        device=counts.device,
+        dtype=counts.dtype,
+    )
+    assert torch.equal(counts, expected_counts)
+
 
 def test_average_accuracy_by_offset_empty():
     """Test average_accuracy_by_offset with empty input."""
-    try:
+    with pytest.raises(ValueError, match="accuracy_history is empty"):
         average_accuracy_by_offset([])
-        assert False, "Should have raised ValueError for empty input"
-    except ValueError as e:
-        assert "accuracy_history is empty" in str(e)
 
 
 def test_average_accuracy_by_offset_preserves_device():
     """Ensure average_accuracy_by_offset keeps tensors on the source device."""
     if not torch.cuda.is_available():
-        print("Skipping offset device test: CUDA not available.")
-        return
+        pytest.skip("CUDA not available.")
 
     B, seq_len = 2, 3
     device = torch.device("cuda", torch.cuda.current_device())
@@ -195,7 +205,7 @@ def test_correct_retrieval_counts_by_timestep():
     counts = correct_retrieval_counts_by_timestep(accuracy_history)
 
     assert len(counts) == seq_len
-    # Each timestep should have B * (t+1) * 0.5 correct retrievals
+    # Each timestep averages across batch then sums across offsets
     for t in range(seq_len):
         expected_count = (t + 1) * 0.5
         assert torch.allclose(counts[t], torch.tensor(expected_count))
@@ -243,59 +253,5 @@ def test_correct_retrieval_counts_pipeline_integration():
 
 def test_correct_retrieval_counts_empty_history_error():
     """correct_retrieval_counts_by_timestep should reject empty histories."""
-    try:
+    with pytest.raises(ValueError, match="accuracy_history is empty"):
         correct_retrieval_counts_by_timestep([])
-        assert False, "Should have raised ValueError for empty accuracy_history"
-    except ValueError as e:
-        assert "accuracy_history is empty" in str(e)
-
-
-def run_all_tests():
-    """Run all test functions."""
-    print("=" * 60)
-    print("Running evaluation function tests...")
-    print("=" * 60)
-
-    test_compute_recall_accuracies_perfect_predictions()
-    print()
-
-    test_compute_recall_accuracies_with_imperfect_predictions()
-    print()
-
-    test_compute_recall_accuracies_device_handling()
-    print()
-
-    test_compute_recall_accuracies_error_cases()
-    print()
-
-    test_average_accuracy_by_offset_perfect()
-    print()
-
-    test_average_accuracy_by_offset_mixed_accuracy()
-    print()
-
-    test_average_accuracy_by_offset_empty()
-    print()
-
-    test_average_accuracy_by_offset_preserves_device()
-    print()
-
-    test_correct_retrieval_counts_by_timestep()
-    print()
-
-    test_correct_retrieval_counts_variable_accuracy()
-    print()
-
-    test_correct_retrieval_counts_pipeline_integration()
-    print()
-
-    test_correct_retrieval_counts_empty_history_error()
-    print()
-
-    print("=" * 60)
-    print("All tests passed! ✓")
-    print("=" * 60)
-
-
-if __name__ == "__main__":
-    run_all_tests()
