@@ -5,69 +5,8 @@ from torch.utils.data import Dataset
 
 
 class InContextRecallDataset(Dataset):
-    def __init__(
-        self,
-        seq_len: int,
-        key_dim: int,
-        val_dim: int,
-        context_size: int,
-        input_corr: float = 0.0,
-        output_corr: float = 0.0,
-    ) -> None:
-        self.seq_len = seq_len
-        self.key_dim = key_dim
-        self.val_dim = val_dim
-        self.context_size = context_size
-        self.input_corr = input_corr
-        self.output_corr = output_corr
-        self.inputs = generate_vectors(seq_len, key_dim, input_corr)
-        self.targets = generate_vectors(seq_len, val_dim, output_corr)
-
-    def __getitem__(self, idx: Union[int, slice]) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Case 1: The index is a single integer
-        """
-        returns a tuple (input_window, target_window) where:
-        - input_window is a tensor of shape (context_size, key_dim)
-        - target_window is a tensor of shape (context_size, val_dim)
-        """
-        if isinstance(idx, int):
-            start_idx = idx - self.context_size + 1
-            if start_idx < 0:
-                padding_len = abs(start_idx)
-                device = self.inputs.device
-                input_padding = torch.zeros(padding_len, self.key_dim, device=device)
-                target_padding = torch.zeros(padding_len, self.val_dim, device=device)
-                input_window = torch.cat((input_padding, self.inputs[: idx + 1]), dim=0)
-                target_window = torch.cat(
-                    (target_padding, self.targets[: idx + 1]), dim=0
-                )
-            else:
-                input_window = self.inputs[start_idx : idx + 1]
-                target_window = self.targets[start_idx : idx + 1]
-            return input_window, target_window
-
-        # Case 2: The index is a slice
-        elif isinstance(idx, slice):
-
-            input_batch = self.inputs[idx]
-            target_batch = self.targets[idx]
-
-            return input_batch, target_batch
-
-        else:
-            raise TypeError("Invalid argument type.")
-
-    def __len__(self) -> int:
-        return self.seq_len
-
-
-class BatchedInContextRecallDataset(Dataset):
     """
     Generate a batch of independent in-context recall sequences.
-
-    Each batch element mirrors :class:`InContextRecallDataset`, but the inputs
-    and targets are stacked along a leading batch dimension so code consuming the
-    dataset can operate on all sequences in parallel.
     """
 
     def __init__(
@@ -146,7 +85,7 @@ class BatchedInContextRecallDataset(Dataset):
     def __len__(self) -> int:
         return self.seq_len
 
-    def to(self, device: Union[str, torch.device]) -> "BatchedInContextRecallDataset":
+    def to(self, device: Union[str, torch.device]) -> "InContextRecallDataset":
         """
         Move all tensors in the dataset to the specified device.
 

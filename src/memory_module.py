@@ -8,7 +8,7 @@ from torch.func import functional_call, grad, vmap
 from src.losses import windowed_p_loss, windowed_recall_cross_entropy
 from src.meta_optimizers import MetaOptimizer
 from src.model_components import LearnableHyperparam
-from src.synthetic_datasets import BatchedInContextRecallDataset
+from src.synthetic_datasets import InContextRecallDataset
 
 
 class TTT(nn.Module):
@@ -133,7 +133,7 @@ def _ensure_batch_vector(
 # forward pass unrolling sequence
 def inner_optimization_forward(
     memory_module: nn.Module, 
-    dataset: BatchedInContextRecallDataset,
+    dataset: InContextRecallDataset,
     inner_optimizer: MetaOptimizer,
     inner_lr_head: nn.Module | torch.Tensor | float,
     inner_loss_weight_head: nn.Module | torch.Tensor,

@@ -184,9 +184,7 @@ class MetaAdamW(MetaOptimizer):
         for name, p in params.items():
             g = grads.get(name, None)
             if g is None:
-                # Apply only weight decay if no gradient
-                new_p = p - lr * weight_decay * p
-                new_params[name] = new_p
+                new_params[name] = p
                 new_m[name] = m[name]
                 new_v[name] = v[name]
                 continue
