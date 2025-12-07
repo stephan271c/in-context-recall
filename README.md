@@ -51,7 +51,7 @@ With alternative architectures to transformers, a natural question to ask is how
 
 The evolution of many linear RNNs can be expressed as solving an online problem, where the state matrix evolves through an optimizer step on an inner loss function. So $M_t=M_{t-1}-\text{optim}(L(M_{t-1},(k_t,v_t)))$. In comparison, a typical RNN evolves as $M_t=f(M_{t-1}, k_t;\theta)$ where $\theta$ are learnable parameters via BPTT.
 
-In `memory_module.py` we have a `TTT` class which evolves its parameters through optimization. We calculate inner gradients explicitly in the forward pass, which is encapsulated in `inner_optimization_forward`. At the same time, certain hyperparameters (such as inner learning rate or initial parameters) are learnable through BPTT across the sequence.
+In `model_components.py` we have a `TTT` class which evolves its parameters through optimization. We calculate inner gradients explicitly in the forward pass, which is encapsulated in `inner_optimization_forward` in `forward_loop.py`. At the same time, certain hyperparameters (such as inner learning rate or initial parameters) are learnable through BPTT across the sequence.
 
 ![image of BPTT with inner loss optimization](images/BPTT.svg)
 

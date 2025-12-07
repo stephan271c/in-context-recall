@@ -86,15 +86,6 @@ class InContextRecallDataset(Dataset):
         return self.seq_len
 
     def to(self, device: Union[str, torch.device]) -> "InContextRecallDataset":
-        """
-        Move all tensors in the dataset to the specified device.
-
-        Args:
-            device: The device to move the tensors to (e.g., 'cpu', 'cuda', 'cuda:0')
-
-        Returns:
-            Self for method chaining
-        """
         self.inputs = self.inputs.to(device)
         self.targets = self.targets.to(device)
         return self

@@ -120,9 +120,9 @@ class MesaLayerMemory(LinearRNN):
         if phi_matrix.ndim != 3:
             raise ValueError("phi_matrix must be batched (3D tensor)")
 
-        if keys.ndim == 3:  # (batch_size, seq_len, key_dim)
+        if keys.ndim == 3:
             return torch.einsum("bvk, btk -> btv", phi_matrix, keys)
-        elif keys.ndim == 2:  # (batch_size, key_dim)
+        elif keys.ndim == 2:
             return torch.einsum("bvk, bk -> bv", phi_matrix, keys)
         else:
             raise ValueError("keys must be 2D or 3D tensor")
