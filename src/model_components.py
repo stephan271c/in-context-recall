@@ -7,9 +7,10 @@ from typing import Union
 class TTT(nn.Module):
     """Test-Time Training MLP module.
     
-    A simple multi-layer perceptron used as a differentiable memory module
-    for test-time training. Supports configurable depth with GELU activations
-    between hidden layers.
+    A differentiable memory module for test-time training.
+    
+    For 1 layer: f(x) = Wx (simple linear transformation)
+    For >1 layers: f(x) = Wx + g(x) where g is an MLP with GELU activations.
     
     Args:
         input_dim: Dimension of input features (key dimension).
@@ -39,32 +40,42 @@ class TTT(nn.Module):
         self.num_layers = num_layers
         intermediate_dim = self.HIDDEN_DIM_MULTIPLIER * self.input_dim
 
-        dims = [self.input_dim]
-        if self.num_layers > 1:
-            dims.extend([intermediate_dim] * (self.num_layers - 1))
-        dims.append(self.output_dim)
+        # Linear projection W for f(x) = Wx (or the Wx part of Wx + g(x))
+        self.linear_weight = nn.Parameter(
+            torch.normal(0, init_var, size=(input_dim, output_dim))
+        )
 
-        self.weights = nn.ParameterList(
-            [
-                nn.Parameter(torch.normal(0, init_var, size=(in_dim, out_dim)))
-                for in_dim, out_dim in zip(dims[:-1], dims[1:])
-            ]
-        )
-        self.biases = nn.ParameterList(
-            [
-                nn.Parameter(torch.zeros(1, out_dim)) if idx > 0 else None
-                for idx, out_dim in enumerate(dims[1:])
-            ]
-        )
+        # Neural network g(x) for multi-layer case
+        if self.num_layers > 1:
+            # Build g(x) as an MLP with (num_layers - 1) hidden layers
+            # Architecture: input -> [hidden -> gelu] * (num_layers - 1) -> output
+            g_layers = []
+            in_dim = input_dim
+            for i in range(self.num_layers - 1):
+                g_layers.append(nn.Linear(in_dim, intermediate_dim))
+                g_layers.append(nn.GELU())
+                in_dim = intermediate_dim
+            g_layers.append(nn.Linear(intermediate_dim, output_dim))
+            self.g_network = nn.Sequential(*g_layers)
+            
+            # Initialize g_network weights
+            for module in self.g_network.modules():
+                if isinstance(module, nn.Linear):
+                    nn.init.normal_(module.weight, 0, init_var)
+                    nn.init.zeros_(module.bias)
+        else:
+            self.g_network = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        for idx, (weight, bias) in enumerate(zip(self.weights, self.biases)):
-            x = torch.matmul(x, weight)
-            if bias is not None:
-                x = x + bias
-            if idx < self.num_layers - 1:
-                x = F.gelu(x)
-        return x
+        # Linear transformation Wx
+        linear_out = torch.matmul(x, self.linear_weight)
+        
+        if self.g_network is not None:
+            # f(x) = Wx + g(x)
+            return linear_out + self.g_network(x)
+        else:
+            # f(x) = Wx
+            return linear_out
 
 
 class HyperparamHeadWrapper:
