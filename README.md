@@ -1,4 +1,4 @@
-This is a PyTorch-based sandbox for in-context recall and meta-optimization experiments.
+This is a PyTorch-based sandbox for in-context recall and meta-optimization experiments. For a background discussion on this topic, see [this](https://stephan271c.github.io/blog/2025/Test-Time-Regression/) blog post.
 
 ## Requirements
 - Python 3.10+ (system Python or pyenv)
