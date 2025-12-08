@@ -1,29 +1,30 @@
+from typing import Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Union
 
 
 class TTT(nn.Module):
     """Test-Time Training MLP module.
-    
+
     A differentiable memory module for test-time training.
-    
+
     For 1 layer: f(x) = Wx (simple linear transformation)
     For >1 layers: f(x) = Wx + g(x) where g is an MLP with GELU activations.
-    
+
     Args:
         input_dim: Dimension of input features (key dimension).
         output_dim: Dimension of output features (value dimension).
         num_layers: Number of linear layers (must be >= 1).
         init_var: Standard deviation for weight initialization.
-        
+
     Raises:
         ValueError: If num_layers < 1.
     """
-    
-    HIDDEN_DIM_MULTIPLIER = 4  # Multiplier for intermediate hidden dimension
-    
+
+    HIDDEN_DIM_MULTIPLIER = 4
+
     def __init__(
         self,
         input_dim: int,
@@ -57,8 +58,7 @@ class TTT(nn.Module):
                 in_dim = intermediate_dim
             g_layers.append(nn.Linear(intermediate_dim, output_dim))
             self.g_network = nn.Sequential(*g_layers)
-            
-            # Initialize g_network weights
+
             for module in self.g_network.modules():
                 if isinstance(module, nn.Linear):
                     nn.init.normal_(module.weight, 0, init_var)
@@ -69,7 +69,7 @@ class TTT(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Linear transformation Wx
         linear_out = torch.matmul(x, self.linear_weight)
-        
+
         if self.g_network is not None:
             # f(x) = Wx + g(x)
             return linear_out + self.g_network(x)
@@ -83,7 +83,10 @@ class HyperparamHeadWrapper:
     Normalizes LR or Weight heads so the main loop doesn't need if/else checks.
     Always returns: Tensor of shape (Batch_Size, ...)
     """
-    def __init__(self, head: Union[nn.Module, torch.Tensor, float], device: torch.device):
+
+    def __init__(
+        self, head: Union[nn.Module, torch.Tensor, float], device: torch.device
+    ):
         # Keep heads on the same device as the main model to avoid device mismatches
         if isinstance(head, nn.Module):
             head = head.to(device)
@@ -95,17 +98,17 @@ class HyperparamHeadWrapper:
         if isinstance(self.head, nn.Module):
             # Check if it takes input or is a purely learnable parameter
             try:
-                out = self.head(current_keys) 
+                out = self.head(current_keys)
             except TypeError:
                 # Fallback to parameter based (e.g. LearnableHyperparam)
                 out = self.head()
             out = out.to(self.device)
-                
+
             # Ensure it has batch dim
             if out.dim() == 0:
                 out = out.expand(batch_size)
             elif out.dim() == 1 and out.shape[0] != batch_size:
-                 # Assume shape is (feature_dim,) -> expand to (B, feature_dim)
+                # Assume shape is (feature_dim,) -> expand to (B, feature_dim)
                 out = out.unsqueeze(0).expand(batch_size, -1)
             return out
 
@@ -121,6 +124,7 @@ class HyperparamHeadWrapper:
         # Case 3: Float
         else:
             return torch.full((batch_size,), self.head, device=self.device)
+
 
 class HyperparamModel(nn.Module):
     """A generic model to predict a single hyperparameter."""

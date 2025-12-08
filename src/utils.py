@@ -9,11 +9,11 @@ from torch.utils._pytree import tree_map
 
 def expand_tensor(x: torch.Tensor, batch_size: int) -> torch.Tensor:
     """Replicate a tensor across the batch dimension with independent storage.
-    
+
     Args:
         x: Input tensor of shape (...).
         batch_size: Target batch size.
-        
+
     Returns:
         Tensor of shape (batch_size, ...) with cloned data.
     """
@@ -24,33 +24,29 @@ def prepare_initial_params(
     module: nn.Module, batch_size: int
 ) -> Dict[str, torch.Tensor]:
     """Extract parameters from a module and broadcast them to (batch, ...) with gradients enabled.
-    
+
     Args:
         module: PyTorch module to extract parameters from.
         batch_size: Target batch size for broadcasting.
-        
+
     Returns:
         Dictionary mapping parameter names to batched parameter tensors with requires_grad=True.
     """
     params = dict(module.named_parameters())
-    return tree_map(
-        lambda p: expand_tensor(p, batch_size).requires_grad_(True), params
-    )
+    return tree_map(lambda p: expand_tensor(p, batch_size).requires_grad_(True), params)
 
 
-def prepare_optimizer_state(
-    state: Any, batch_size: int, device: torch.device
-) -> Any:
+def prepare_optimizer_state(state: Any, batch_size: int, device: torch.device) -> Any:
     """Broadcast optimizer state to the batch using PyTree utilities.
-    
+
     Handles tensors, booleans, integers, and floats by expanding them
     to have a batch dimension.
-    
+
     Args:
         state: Optimizer state (nested dict/list structure with tensors and scalars).
         batch_size: Target batch size for broadcasting.
         device: Target device for created tensors.
-        
+
     Returns:
         Batched optimizer state with the same structure as input.
     """
@@ -78,15 +74,15 @@ def normalize_loss_weights(
 
     HyperparamHeadWrapper already guarantees a batch dimension; here we only
     fix the time/window dimension.
-    
+
     Args:
         weights: Input weights tensor (scalar, 1D, or 2D).
         batch_size: Expected batch size.
         length: Expected window/sequence length.
-        
+
     Returns:
         Tensor of shape (batch_size, length).
-        
+
     Raises:
         ValueError: If weights have incompatible dimensions or shapes.
     """
@@ -110,14 +106,14 @@ def normalize_loss_weights(
 
 def normalize_lr(lr: torch.Tensor, batch_size: int) -> torch.Tensor:
     """Ensure learning rate is a (batch_size,) vector.
-    
+
     Args:
         lr: Input learning rate tensor (scalar, 1D, or 2D with last dim = 1).
         batch_size: Expected batch size.
-        
+
     Returns:
         Tensor of shape (batch_size,).
-        
+
     Raises:
         ValueError: If learning rate has incompatible shape.
     """

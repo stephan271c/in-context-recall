@@ -72,9 +72,7 @@ def windowed_p_loss(
 
     # regularization: Frobenius norm squared for 1D tensor
     if weights is not None and reg_coef > 0:
-        reg_term = reg_coef * torch.sum(
-            weights**2
-        )  
+        reg_term = reg_coef * torch.sum(weights**2)
         final_loss = data_loss + reg_term
     else:
         final_loss = data_loss
@@ -125,7 +123,7 @@ def windowed_recall_cross_entropy(
         all_keys: Tensor of shape (sequence_length, key_dim) containing every key.
         all_values: Tensor of shape (sequence_length, value_dim) containing every value.
         time_index: Index of the current timestep (0-based).
-        window_size: Number of timesteps to include in the recall window. values 
+        window_size: Number of timesteps to include in the recall window. values
             larger than the number of seen steps are automatically clamped.
         offset: Number of steps to shift the recall window backwards. The window
             ends at ``time_index - offset``.

@@ -8,12 +8,8 @@ from src.losses import windowed_p_loss, windowed_recall_cross_entropy
 from src.meta_optimizers import MetaOptimizer
 from src.model_components import HyperparamHeadWrapper
 from src.synthetic_datasets import InContextRecallDataset
-from src.utils import (
-    normalize_loss_weights,
-    normalize_lr,
-    prepare_initial_params,
-    prepare_optimizer_state,
-)
+from src.utils import (normalize_loss_weights, normalize_lr,
+                       prepare_initial_params, prepare_optimizer_state)
 
 
 def inner_optimization_forward(
@@ -28,12 +24,12 @@ def inner_optimization_forward(
     eval_mode: bool = False,
 ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
     """Perform inner optimization forward pass, unrolling over the sequence.
-    
+
     This function implements the forward pass in a sequence: for each timestep,
     it computes gradients of an inner loss and updates the memory module parameters
     using the provided meta-optimizer. An outer loss is accumulated over all timesteps
     for meta-learning the inner loop hyperparameters.
-    
+
     Args:
         memory_module: The differentiable memory model (e.g., TTT MLP).
         dataset: InContextRecallDataset providing key-value pairs with windowing.
@@ -47,7 +43,7 @@ def inner_optimization_forward(
         outer_window_size: Number of timesteps to include in outer loss computation.
         offset: Backward offset for the outer loss window.
         eval_mode: If True, also collect predictions at each timestep for evaluation.
-        
+
     Returns:
         A tuple of:
             - outer_loss: Scalar tensor containing the accumulated outer loss.
@@ -83,7 +79,7 @@ def inner_optimization_forward(
             for k, val in inner_optimizer_kwargs.items()
             if k != "lr"
         }
-    
+
     def single_inner_loss(
         params: Dict[str, torch.Tensor],
         key_window: torch.Tensor,
@@ -119,18 +115,18 @@ def inner_optimization_forward(
             seq_values,
             time_index=time_idx,
             window_size=outer_window_size,
-            offset=offset
+            offset=offset,
         )
 
     vmap_outer_loss = vmap(outer_loss_fn, in_dims=(0, 0, 0, None))
-    
+
     outer_loss = torch.zeros((), device=device, dtype=inputs.dtype)
     predictions: List[torch.Tensor] = []
 
     for t in range(seq_len):
         key_window, value_window = dataset[t]
         # Shapes: (B, ctx_window, key_dim), (B, ctx_window, val_dim)
-        
+
         window_length = key_window.shape[1]
         current_keys = key_window[:, -1]
 
